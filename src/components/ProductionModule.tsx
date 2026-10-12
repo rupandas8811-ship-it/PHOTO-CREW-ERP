@@ -16,7 +16,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage, verifyStaffDatabaseUniqueness, scrollToFirstError } from '../utils';
 import { AppLogo } from './AppLogo';
 import { AddNoteModal } from './AddNoteModal';
 import { StatusText } from './ui/StatusText';
@@ -3858,14 +3858,23 @@ _Please acknowledge receipt of this task assignment._`;
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [currentStaffPassword, setCurrentStaffPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [newStaffSkills, setNewStaffSkills] = useState<string[]>([]);
   const [newSkillText, setNewSkillText] = useState('');
   const [addStaffError, setAddStaffError] = useState('');
   const [addStaffSuccess, setAddStaffSuccess] = useState('');
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
   const [showSmartFilter, setShowSmartFilter] = useState(false);
-   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
+
+  // Automatically scroll modal or page to error message when staff addition validation fails
+  useEffect(() => {
+    if (addStaffError) {
+      scrollToFirstError();
+    }
+  }, [addStaffError]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -6257,7 +6266,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <button
                               onClick={async () => {
                                 if (confirm(`Are you sure you want to remove ${member.name} from the post-production database?`)) {
-                                  await deleteStaff(member.staff_id);
+                                  await deleteProductionStaff(member.staff_id);
                                 }
                               }}
                               className="p-1.5 bg-rose-500/10 hover:bg-rose-500/25 text-rose-450 border border-rose-500/20 rounded-lg transition duration-150 cursor-pointer"
@@ -7212,17 +7221,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   if (parsed.auth_user_id) targetAuthUserId = parsed.auth_user_id;
                 } catch (e) {}
               }
-              if (!targetAuthUserId && users && users.length > 0) {
-                const matchedUser = users.find(u => 
-                  (currentStaff?.email && u.email && u.email.toLowerCase() === currentStaff.email.toLowerCase()) ||
-                  (currentStaff?.mobile && u.mobile && u.mobile === currentStaff.mobile)
-                );
-                if (matchedUser) {
-                  targetAuthUserId = (matchedUser as any).auth_user_id || matchedUser.id;
-                }
-              }
 
-              // Update password securely in the authentication provider only if non-blank password is provided
+              // Update password securely in the authentication provider if provided
               if (password && password.trim() !== '') {
                 const cleanPwd = password.trim();
                 if (cleanPwd.length < 6) {
@@ -7253,6 +7253,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 if (resData.auth_user_id && currentStaff) {
                   currentStaff.auth_user_id = resData.auth_user_id;
                 }
+                setCurrentStaffPassword(cleanPwd);
               }
 
               // Update explicit record being edited (mobile and email are permanently locked)
@@ -7264,71 +7265,57 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 staff_type: newStaffType as any,
                 Staff_Type: newStaffType as any
               });
+              if (refreshData) {
+                try { await refreshData(); } catch (e) {}
+              }
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
-              // Create new auth user
-              const computedEmail = email || `${mobile}@photocrew.com`;
+              // 1. Password check
               const cleanPwd = (password || '').trim();
               if (cleanPwd.length < 6) {
                 setAddStaffError('Password must be at least 6 characters.');
                 setIsSubmittingStaff(false);
                 return;
               }
-              const authRes = await fetch('/api/auth/create-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: computedEmail,
-                  password: cleanPwd,
-                  name,
-                  role: 'Production Staff',
-                })
-              });
-              
-              if (!authRes.ok) {
-                 const errData = await authRes.json();
-                 throw new Error(errData.error || 'Failed to create authentication credentials');
-              }
-              
-              const authData = await authRes.json();
-              const authUserId = authData.data.user.id;
 
-              // Check if duplicate exists (name or mobile matching)
-              const existingStaff = (productionStaff || []).find(
-                (s) =>
-                  s.name.toLowerCase() === name.toLowerCase() ||
-                  s.mobile === mobile
+              // 2. Query and verify actual database uniqueness across production_staff, users, operations_staff
+              const computedEmail = email || `${mobile}@photocrew.com`;
+              const uniquenessCheck = await verifyStaffDatabaseUniqueness(
+                supabaseClient,
+                mobile,
+                computedEmail,
+                null
               );
 
-              if (existingStaff) {
-                // Update existing staff
-                await updateProductionStaff(existingStaff.staff_id, {
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any,
-                  notes: JSON.stringify({ auth_user_id: authUserId })
-                });
-                setAddStaffSuccess('✅ Staff details updated successfully.');
-              } else {
-                // Create new staff record in production_staff table
-                await addProductionStaff({
-                  name,
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  role: 'Production Staff',
-                  department: 'Post-Production',
-                  status: 'Active',
-                  joining_date: new Date().toISOString().split('T')[0],
-                  notes: JSON.stringify({ auth_user_id: authUserId })
-                });
-                setAddStaffSuccess('✅ Staff details updated successfully.');
+              if (!uniquenessCheck.isUnique) {
+                if (uniquenessCheck.isMobileDuplicate && uniquenessCheck.isEmailDuplicate) {
+                  setAddStaffError("This mobile number is already registered. This email address is already registered.");
+                } else if (uniquenessCheck.isMobileDuplicate) {
+                  setAddStaffError("This mobile number is already registered.");
+                } else if (uniquenessCheck.isEmailDuplicate) {
+                  setAddStaffError("This email address is already registered.");
+                } else {
+                  setAddStaffError(uniquenessCheck.error || "Registration validation failed.");
+                }
+                setIsSubmittingStaff(false);
+                return;
               }
+
+              // 3. Create staff record in production_staff table and sync authentication
+              await addProductionStaff({
+                name,
+                mobile,
+                email: computedEmail,
+                whatsapp_number: whatsapp,
+                Skill: skillsArray as any,
+                staff_type: newStaffType as any,
+                role: 'Production Staff',
+                department: 'Post-Production',
+                status: 'Active',
+                joining_date: new Date().toISOString().split('T')[0],
+                password: cleanPwd
+              });
+              setAddStaffSuccess('✅ Staff details updated successfully.');
             }
 
             // Set timeout to clear success message
@@ -7336,21 +7323,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               setAddStaffSuccess('');
             }, 3000);
 
-            // Reset form
+            // Reset form only on success
             setNewStaffName('');
             setNewStaffType('');
             setNewStaffMobile('');
             setNewStaffWhatsapp('');
             setNewStaffEmail('');
             setNewStaffPassword('');
-            setNewStaffType('');
-            setNewStaffMobile('');
-            setNewStaffWhatsapp('');
             setNewStaffSkills([]);
             setEditingStaffId(null);
             setShowStaffModal(false);
           } catch (err: any) {
-            setAddStaffError('❌ ' + (err.message || 'Failed to update staff details.'));
+            const formattedMsg = formatStaffErrorMessage(err);
+            setAddStaffError(formattedMsg);
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -7515,12 +7500,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         disabled={Boolean(editingStaffId)}
                         readOnly={Boolean(editingStaffId)}
                         value={newStaffMobile}
-                        onChange={(e) => setNewStaffMobile(e.target.value)}
+                        onChange={(e) => {
+                          setNewStaffMobile(e.target.value);
+                          if (addStaffError) setAddStaffError('');
+                        }}
                         placeholder="e.g. 9876543210"
-                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
-                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                        className={`w-full bg-zinc-900 border px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
+                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : addStaffError && addStaffError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-zinc-850'
                         }`}
                       />
+                      {addStaffError && addStaffError.toLowerCase().includes('mobile') && (
+                        <p className="text-[11px] text-rose-400 font-sans mt-1">
+                          This mobile number is already registered.
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -7553,16 +7546,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         disabled={Boolean(editingStaffId)}
                         readOnly={Boolean(editingStaffId)}
                         value={newStaffEmail}
-                        onChange={(e) => setNewStaffEmail(e.target.value)}
+                        onChange={(e) => {
+                          setNewStaffEmail(e.target.value);
+                          if (addStaffError) setAddStaffError('');
+                        }}
                         placeholder="e.g. rahul@photocrew.com"
-                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
-                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                        className={`w-full bg-zinc-900 border px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
+                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : addStaffError && addStaffError.toLowerCase().includes('email') ? 'border-rose-500/70' : 'border-zinc-850'
                         }`}
                       />
+                      {addStaffError && addStaffError.toLowerCase().includes('email') && (
+                        <p className="text-[11px] text-rose-400 font-sans mt-1">
+                          This email address is already registered.
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Password {editingStaffId ? '' : <span className="text-rose-500">*</span>}
+                        {editingStaffId ? 'New Password' : 'Password'} {editingStaffId ? '' : <span className="text-rose-500">*</span>}
                       </label>
                       <div className="relative">
                         <input
@@ -7570,7 +7571,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder={editingStaffId ? "Enter new password" : "Enter password"}
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -7581,6 +7582,25 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
+                      {/* Current Password Display */}
+                      {editingStaffId && (
+                        <div className="mt-2.5 p-3 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between">
+                          <div className="text-xs font-mono text-zinc-400 flex items-center gap-2">
+                            <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono tracking-wider">Current Password:</span>
+                            <span className="text-amber-400 font-bold select-all font-mono tracking-wider text-xs">
+                              {showCurrentPassword ? (currentStaffPassword || newStaffMobile || '••••••••') : '••••••••'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                            className="text-zinc-400 hover:text-white transition-colors cursor-pointer p-1"
+                            title={showCurrentPassword ? "Hide current password" : "Show current password"}
+                          >
+                            {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {/* Tag-based Skills input field */}
                     <div>
@@ -7738,7 +7758,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <th className="px-4 py-3 font-bold">Staff Name</th>
                         <th className="px-4 py-3 font-bold w-36 min-w-[140px] max-w-[140px]">Skills</th>
                         <th className="px-4 py-3 font-bold">Contact Details</th>
-                        <th className="px-4 py-3 font-bold">Availability</th>
                         <th className="px-4 py-3 font-bold">Status</th>
                         <th className="px-4 py-3 font-bold text-right">Actions</th>
                       </tr>
@@ -7777,7 +7796,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         if (filteredStaff.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={7} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                              <td colSpan={6} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                                 No matching staff members found.
                               </td>
                             </tr>
@@ -7888,27 +7907,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     <span className="text-emerald-400">💬 {member.whatsapp_number}</span>
                                   )}
                                 </div>
-                              </td>
-
-                              {/* Availability */}
-                              <td className="px-4 py-3">
-                                {isAvailable ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                                    Available
-                                  </span>
-                                ) : (
-                                  <div className="flex flex-col gap-1 items-start">
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                                      Busy
-                                    </span>
-                                    <span className="text-[9px] text-zinc-500 font-mono">
-                                      {activeAssignments.length} active task{activeAssignments.length > 1 ? 's' : ''}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
+                               </td>
 
                               {/* Status */}
                               <td className="px-4 py-3">
@@ -7954,6 +7953,26 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffEmail(member.email || '');
                                       setNewStaffPassword('');
                                       setShowPassword(false);
+                                      setShowCurrentPassword(true);
+
+                                      // Retrieve current password for display
+                                      const pwd = getStaffCurrentPassword(member, users) || member.mobile || '';
+                                      setCurrentStaffPassword(pwd);
+                                      fetchStaffCurrentPassword(member, users).then(livePwd => {
+                                        if (livePwd) setCurrentStaffPassword(livePwd);
+                                      });
+                                      fetch('/api/auth/get-staff-password', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({
+                                          staff_id: member.staff_id,
+                                          email: member.email,
+                                          mobile: member.mobile,
+                                          auth_id: member.auth_user_id || (member.notes && member.notes.includes('auth_user_id') ? JSON.parse(member.notes).auth_user_id : undefined)
+                                        })
+                                      }).then(r => r.json()).then(d => {
+                                        if (d?.password) setCurrentStaffPassword(d.password);
+                                      }).catch(() => null);
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                       setShowStaffModal(true);
                                     }}

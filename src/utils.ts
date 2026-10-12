@@ -1,15 +1,39 @@
 import { Lead, Order, Payment, Customer } from './types';
 import { supabaseClient } from './supabaseClient';
+import heic2any from 'heic2any';
 
 /**
  * Resolves a raw image value (which could be a full URL, base64 data URI, or a Supabase Storage relative path)
  * into a usable HTTP/HTTPS public image URL.
  */
 export function resolveStorageUrl(val: any): string | null {
-  if (!val || typeof val !== 'string') return null;
-  const trimmed = val.trim();
-  if (!trimmed) return null;
+  if (!val) return null;
+  
+  // If passed an object or JSON string containing photo URL
+  if (typeof val === 'object' && val !== null) {
+    const candidate = val.photoUrl || val.photo_url || val.url || val.imageUrl || val.image_url;
+    if (candidate && typeof candidate === 'string') {
+      return resolveStorageUrl(candidate);
+    }
+    return null;
+  }
 
+  if (typeof val !== 'string') return null;
+  let trimmed = val.trim();
+  if (!trimmed || trimmed === '—' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') return null;
+
+  // Handle JSON stringified objects stored in DB columns
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      const innerUrl = parsed?.photo_url || parsed?.photoUrl || parsed?.url || parsed?.imageUrl || parsed?.image_url;
+      if (innerUrl && typeof innerUrl === 'string') {
+        return resolveStorageUrl(innerUrl);
+      }
+    } catch (_) {}
+  }
+
+  // Already a full web URL or data/blob URI
   if (
     trimmed.startsWith('http://') ||
     trimmed.startsWith('https://') ||
@@ -19,14 +43,229 @@ export function resolveStorageUrl(val: any): string | null {
     return trimmed;
   }
 
-  // If it's a relative path like "proofs/xyz.jpg" or "img/proofs/xyz.jpg" or "xyz.png"
-  if (/\.(jpg|jpeg|png|webp|gif|svg|bmp)$/i.test(trimmed) || trimmed.includes('/')) {
-    const cleanPath = trimmed.replace(/^img\//, '').replace(/^\//, '');
-    const supabaseUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co';
-    return `${supabaseUrl}/storage/v1/object/public/img/${cleanPath}`;
+  const supabaseUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co';
+
+  // Handle paths already containing /storage/v1/object/public/...
+  if (trimmed.startsWith('/storage/v1/object/public/')) {
+    return `${supabaseUrl}${trimmed}`;
+  }
+  if (trimmed.startsWith('storage/v1/object/public/')) {
+    return `${supabaseUrl}/${trimmed}`;
   }
 
-  return null;
+  // If path is stored in the 'operations' bucket
+  if (trimmed.startsWith('operations/') || trimmed.startsWith('/operations/')) {
+    const cleanPath = trimmed.replace(/^\/?operations\//, '');
+    return `${supabaseUrl}/storage/v1/object/public/operations/${cleanPath}`;
+  }
+
+  // If path is stored in the 'img' bucket or relative 'proofs/...'
+  const cleanImgPath = trimmed.replace(/^\/?img\//, '').replace(/^\//, '');
+  return `${supabaseUrl}/storage/v1/object/public/img/${cleanImgPath}`;
+}
+
+/**
+ * Converts and compresses any proof image (HEIC, HEIF, PNG, JPEG, WEBP, Camera photos)
+ * into a clean data URL and Blob, preserving aspect ratio, quality, and MIME type without blackout.
+ */
+export async function processAndCompressImage(
+  fileOrInput: File | Blob | string,
+  maxDim = 2000
+): Promise<{ dataUrl: string; blob: Blob; contentType: string }> {
+  let activeBlob: Blob | File;
+  let originalName = '';
+  let originalType = '';
+
+  if (fileOrInput instanceof File) {
+    activeBlob = fileOrInput;
+    originalName = fileOrInput.name || '';
+    originalType = fileOrInput.type || '';
+  } else if (fileOrInput instanceof Blob) {
+    activeBlob = fileOrInput;
+    originalType = fileOrInput.type || '';
+  } else if (typeof fileOrInput === 'string' && fileOrInput.trim().startsWith('data:')) {
+    const trimmed = fileOrInput.trim();
+    const parts = trimmed.split(';base64,');
+    const typeStr = parts[0].replace('data:', '') || 'image/jpeg';
+    const byteCharacters = atob(parts[1] || '');
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    activeBlob = new Blob(byteArrays, { type: typeStr });
+    originalType = typeStr;
+  } else if (typeof fileOrInput === 'string') {
+    const resolved = resolveStorageUrl(fileOrInput);
+    if (resolved) {
+      return {
+        dataUrl: resolved,
+        blob: new Blob([], { type: 'image/jpeg' }),
+        contentType: 'image/jpeg'
+      };
+    }
+    throw new Error("Invalid proof image string provided.");
+  } else {
+    throw new Error("Invalid image input format.");
+  }
+
+  // 1. Detect format
+  const nameLower = originalName.toLowerCase();
+  const typeLower = originalType.toLowerCase();
+  const isHeic = nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || typeLower.includes('heic') || typeLower.includes('heif');
+  const isPng = nameLower.endsWith('.png') || typeLower.includes('png');
+  const isWebp = nameLower.endsWith('.webp') || typeLower.includes('webp');
+
+  // 2. Convert HEIC/HEIF camera photos if necessary
+  if (isHeic && typeof window !== 'undefined') {
+    try {
+      console.log('[Proof Image Processing] Converting HEIC image to JPEG via heic2any...');
+      const converted = await heic2any({
+        blob: activeBlob,
+        toType: 'image/jpeg',
+        quality: 0.90
+      });
+      activeBlob = Array.isArray(converted) ? converted[0] : converted;
+      originalType = 'image/jpeg';
+      console.log('[Proof Image Processing] HEIC conversion successful.');
+    } catch (err) {
+      console.warn('[Proof Image Processing] heic2any warning:', err);
+    }
+  }
+
+  // 3. Read activeBlob as Data URL
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve((e.target?.result as string) || '');
+    reader.onerror = (e) => reject(e);
+    reader.readAsDataURL(activeBlob);
+  });
+
+  if (!rawDataUrl) {
+    throw new Error('Failed to read image file');
+  }
+
+  // If the file is already a valid web image (PNG, WEBP, JPEG, GIF) and under 15MB,
+  // preserve it directly without re-encoding to avoid canvas blackout bugs and preserve 100% quality and aspect ratio
+  const targetMime = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+  if (!isHeic && activeBlob.size > 0 && activeBlob.size <= 15 * 1024 * 1024) {
+    return {
+      dataUrl: rawDataUrl,
+      blob: activeBlob,
+      contentType: activeBlob.type || targetMime
+    };
+  }
+
+  // 4. For very large images or HEIC: resize safely via canvas while strictly preserving original colors and aspect ratio
+  return new Promise((resolve) => {
+    const fallback = () => {
+      resolve({
+        dataUrl: rawDataUrl,
+        blob: activeBlob,
+        contentType: activeBlob.type || targetMime
+      });
+    };
+
+    if (typeof window === 'undefined') {
+      fallback();
+      return;
+    }
+
+    const img = new Image();
+    // Do NOT set crossOrigin on local data URIs to avoid canvas tainting/blackout in WebKit & mobile browsers
+
+    img.onload = async () => {
+      try {
+        if (typeof img.decode === 'function') {
+          await img.decode().catch(() => {});
+        }
+
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (!width || !height || width <= 0 || height <= 0) {
+          fallback();
+          return;
+        }
+
+        // Scale while preserving exact aspect ratio
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          fallback();
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // Only fill white background for JPEG when alpha transparency would otherwise turn black
+        if (!isPng && !isWebp) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const outMime = isPng ? 'image/png' : isWebp ? 'image/webp' : 'image/jpeg';
+        const outQuality = isPng ? undefined : 0.92;
+
+        const processedBlob = await new Promise<Blob | null>((resBlob) => {
+          canvas.toBlob(resBlob, outMime, outQuality);
+        });
+
+        if (!processedBlob || processedBlob.size === 0) {
+          fallback();
+          return;
+        }
+
+        const processedDataUrl = await new Promise<string>((resUrl) => {
+          const r = new FileReader();
+          r.onload = (e) => resUrl((e.target?.result as string) || '');
+          r.onerror = () => resUrl('');
+          r.readAsDataURL(processedBlob);
+        });
+
+        if (!processedDataUrl) {
+          fallback();
+          return;
+        }
+
+        resolve({
+          dataUrl: processedDataUrl,
+          blob: processedBlob,
+          contentType: outMime
+        });
+      } catch (err) {
+        console.warn('[Proof Image Processing] Canvas scaling error, falling back to original:', err);
+        fallback();
+      }
+    };
+
+    img.onerror = (err) => {
+      console.warn('[Proof Image Processing] Image load error, falling back:', err);
+      fallback();
+    };
+
+    img.src = rawDataUrl;
+  });
 }
 
 /**
@@ -51,40 +290,34 @@ export async function uploadProofToStorage(proofInput: string | File | Blob, fil
   let contentType = 'image/jpeg';
   let base64DataUri: string | null = null;
 
-  if (proofInput instanceof File || proofInput instanceof Blob) {
-    blob = proofInput;
-    contentType = proofInput.type || 'image/jpeg';
-    try {
-      base64DataUri = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(proofInput);
-      });
-    } catch (e) {
-      console.warn("[uploadProofToStorage] Could not generate base64 for fallback:", e);
-    }
-  } else if (typeof proofInput === 'string' && proofInput.trim().startsWith('data:')) {
-    base64DataUri = proofInput.trim();
-    const parts = base64DataUri.split(';base64,');
-    contentType = parts[0].replace('data:', '') || 'image/jpeg';
-    const byteCharacters = atob(parts[1]);
-    const byteArrays = [];
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
+  try {
+    const processed = await processAndCompressImage(proofInput);
+    blob = processed.blob;
+    contentType = processed.contentType || 'image/jpeg';
+    base64DataUri = processed.dataUrl;
+  } catch (procErr) {
+    console.warn("[uploadProofToStorage] Image processing warning, using direct fallback:", procErr);
+    if (proofInput instanceof File || proofInput instanceof Blob) {
+      blob = proofInput;
+      contentType = proofInput.type || 'image/jpeg';
+    } else if (typeof proofInput === 'string' && proofInput.startsWith('data:')) {
+      base64DataUri = proofInput;
+      const parts = base64DataUri.split(';base64,');
+      contentType = parts[0].replace('data:', '') || 'image/jpeg';
+      const byteCharacters = atob(parts[1] || '');
+      const byteArrays = [];
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
       }
-      byteArrays.push(new Uint8Array(byteNumbers));
+      blob = new Blob(byteArrays, { type: contentType });
+    } else {
+      throw new Error("Invalid proof format provided.");
     }
-    blob = new Blob(byteArrays, { type: contentType });
-  } else if (typeof proofInput === 'string') {
-    const resolved = resolveStorageUrl(proofInput);
-    if (resolved) return resolved;
-    throw new Error("Invalid proof format provided.");
-  } else {
-    throw new Error("Invalid proof input format.");
   }
 
   const cleanPrefix = filenamePrefix.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -695,36 +928,28 @@ export function checkGlobalMobileUnique(
   prodStaffList: any[] = []
 ): { isUnique: boolean; existingAccountName?: string; existingRole?: string; error?: string } {
   const norm = normalizeMobileNumber(mobile);
-  if (!norm || norm.length < 7) {
+  if (!norm || norm.length < 7 || norm === '0000000000') {
     return { isUnique: true };
   }
 
   const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
 
-  // 1. Check users table/state
-  for (const u of usersList) {
-    if (!u) continue;
-    const uNorm = normalizeMobileNumber(u.mobile || u.phone);
-    if (uNorm && uNorm === norm) {
-      const uId = u.id ? String(u.id).trim().toLowerCase() : '';
-      const uAuthId = u.auth_user_id ? String(u.auth_user_id).trim().toLowerCase() : '';
-      if (cleanExclude && (uId === cleanExclude || uAuthId === cleanExclude)) {
-        continue;
-      }
-      return {
-        isUnique: false,
-        existingAccountName: u.name || u.full_name || 'User',
-        existingRole: u.role || 'Staff',
-        error: 'Mobile number already exists. Please use a different mobile number.'
-      };
-    }
+  // Active staff mobile sets to identify legitimate staff vs orphaned records
+  const activeStaffMobiles = new Set<string>();
+  for (const s of opStaffList) {
+    const sNorm = normalizeMobileNumber(s?.mobile || s?.mobile_number || s?.phone);
+    if (sNorm && sNorm.length >= 7 && sNorm !== '0000000000') activeStaffMobiles.add(sNorm);
+  }
+  for (const p of prodStaffList) {
+    const pNorm = normalizeMobileNumber(p?.mobile || p?.mobile_number || p?.phone);
+    if (pNorm && pNorm.length >= 7 && pNorm !== '0000000000') activeStaffMobiles.add(pNorm);
   }
 
-  // 2. Check operations staff
+  // 1. Check operations staff
   for (const s of opStaffList) {
     if (!s) continue;
     const sNorm = normalizeMobileNumber(s.mobile || s.mobile_number || s.phone);
-    if (sNorm && sNorm === norm) {
+    if (sNorm && sNorm.length >= 7 && sNorm !== '0000000000' && sNorm === norm) {
       const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
       const sAuthId = s.auth_user_id ? String(s.auth_user_id).trim().toLowerCase() : '';
       if (cleanExclude && (sId === cleanExclude || sAuthId === cleanExclude)) {
@@ -734,16 +959,16 @@ export function checkGlobalMobileUnique(
         isUnique: false,
         existingAccountName: s.name || s.staff_name || 'Staff',
         existingRole: 'Operations Staff',
-        error: 'Mobile number already exists. Please use a different mobile number.'
+        error: 'This mobile number is already registered. Please use a different number.'
       };
     }
   }
 
-  // 3. Check production staff
+  // 2. Check production staff
   for (const p of prodStaffList) {
     if (!p) continue;
     const pNorm = normalizeMobileNumber(p.mobile || p.mobile_number || p.phone);
-    if (pNorm && pNorm === norm) {
+    if (pNorm && pNorm.length >= 7 && pNorm !== '0000000000' && pNorm === norm) {
       const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
       const pAuthId = p.auth_user_id ? String(p.auth_user_id).trim().toLowerCase() : '';
       if (cleanExclude && (pId === cleanExclude || pAuthId === cleanExclude)) {
@@ -753,7 +978,35 @@ export function checkGlobalMobileUnique(
         isUnique: false,
         existingAccountName: p.name || p.staff_name || 'Staff',
         existingRole: 'Production Staff',
-        error: 'Mobile number already exists. Please use a different mobile number.'
+        error: 'This mobile number is already registered. Please use a different number.'
+      };
+    }
+  }
+
+  // 3. Check users table/state (excluding orphaned staff records from deleted staff)
+  for (const u of usersList) {
+    if (!u) continue;
+    const uRole = (u.role || '').trim();
+    const isOpsRole = uRole === 'Operation Staff' || uRole === 'Operations Team';
+    const isProdRole = uRole === 'Production Team' || uRole === 'Production Staff';
+    const uNorm = normalizeMobileNumber(u.mobile || u.phone);
+
+    // If an account in users has a staff role but is NOT in active staff lists, it is an orphan
+    if ((isOpsRole || isProdRole) && (!uNorm || !activeStaffMobiles.has(uNorm))) {
+      continue;
+    }
+
+    if (uNorm && uNorm.length >= 7 && uNorm !== '0000000000' && uNorm === norm) {
+      const uId = u.id ? String(u.id).trim().toLowerCase() : '';
+      const uAuthId = u.auth_user_id ? String(u.auth_user_id).trim().toLowerCase() : '';
+      if (cleanExclude && (uId === cleanExclude || uAuthId === cleanExclude)) {
+        continue;
+      }
+      return {
+        isUnique: false,
+        existingAccountName: u.name || u.full_name || 'User',
+        existingRole: u.role || 'Staff',
+        error: 'This mobile number is already registered. Please use a different number.'
       };
     }
   }
@@ -761,9 +1014,9 @@ export function checkGlobalMobileUnique(
   return { isUnique: true };
 }
 
-export function cleanEmail(email: string | undefined): string {
+export function cleanEmail(email: string | undefined | null): string {
   if (!email) return '';
-  return email.trim().toLowerCase();
+  return String(email).trim().toLowerCase();
 }
 
 export interface CheckGlobalStaffUniquenessParams {
@@ -772,6 +1025,7 @@ export interface CheckGlobalStaffUniquenessParams {
   excludeId?: string | null;
   excludeEmail?: string | null;
   excludeMobile?: string | null;
+  excludeStaffId?: string | null;
   usersList?: any[];
   opStaffList?: any[];
   prodStaffList?: any[];
@@ -779,6 +1033,8 @@ export interface CheckGlobalStaffUniquenessParams {
 
 export function checkGlobalStaffUniqueness(params: CheckGlobalStaffUniquenessParams): {
   isUnique: boolean;
+  isMobileDuplicate?: boolean;
+  isEmailDuplicate?: boolean;
   error?: string;
   existingAccountName?: string;
   existingRole?: string;
@@ -789,92 +1045,487 @@ export function checkGlobalStaffUniqueness(params: CheckGlobalStaffUniquenessPar
     excludeId,
     excludeEmail,
     excludeMobile,
+    excludeStaffId,
     usersList = [],
     opStaffList = [],
     prodStaffList = []
   } = params;
 
-  if (mobile) {
-    const normMobile = normalizeMobileNumber(mobile);
-    const normExcludeMobile = excludeMobile ? normalizeMobileNumber(excludeMobile) : null;
-    if (!normExcludeMobile || normMobile !== normExcludeMobile) {
-      const mobCheck = checkGlobalMobileUnique(mobile, excludeId, usersList, opStaffList, prodStaffList);
-      if (!mobCheck.isUnique) {
-        return mobCheck;
+  const normMobile = normalizeMobileNumber(mobile);
+  const normEmail = cleanEmail(email);
+
+  const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
+  const cleanExcludeStaffId = excludeStaffId ? String(excludeStaffId).trim().toLowerCase() : null;
+  const cleanExcludeEmail = excludeEmail ? cleanEmail(excludeEmail) : null;
+  const cleanExcludeMobile = excludeMobile ? normalizeMobileNumber(excludeMobile) : null;
+
+  const isExcluded = (id?: string | null, rEmail?: string | null, rMobile?: string | null) => {
+    const sId = id ? String(id).trim().toLowerCase() : '';
+    const sEmail = cleanEmail(rEmail);
+    const sMobile = normalizeMobileNumber(rMobile);
+
+    if (cleanExclude && sId && (sId === cleanExclude || cleanExclude.includes(sId) || sId.includes(cleanExclude))) return true;
+    if (cleanExcludeStaffId && sId && (sId === cleanExcludeStaffId || cleanExcludeStaffId.includes(sId) || sId.includes(cleanExcludeStaffId))) return true;
+    if (cleanExcludeEmail && sEmail && sEmail === cleanExcludeEmail) return true;
+    if (cleanExcludeMobile && sMobile && sMobile === cleanExcludeMobile) return true;
+    return false;
+  };
+
+  let isMobileDuplicate = false;
+  let isEmailDuplicate = false;
+  let existingAccountName: string | undefined;
+  let existingRole: string | undefined;
+
+  const isValidMobileToMatch = normMobile && normMobile.length >= 7 && normMobile !== '0000000000';
+  const isValidEmailToMatch = normEmail && normEmail.includes('@');
+
+  // Track active staff identifiers to ignore orphaned user records
+  const activeStaffMobiles = new Set<string>();
+  const activeStaffEmails = new Set<string>();
+
+  // 1. Check operations staff
+  for (const s of opStaffList) {
+    if (!s) continue;
+    const sNormMobile = normalizeMobileNumber(s.mobile || s.mobile_number || s.phone);
+    const sEmail = cleanEmail(s.email);
+    if (sNormMobile && sNormMobile.length >= 7 && sNormMobile !== '0000000000') activeStaffMobiles.add(sNormMobile);
+    if (sEmail && sEmail.includes('@')) activeStaffEmails.add(sEmail);
+
+    if (isExcluded(s.staff_id || s.id || s.auth_user_id, s.email, s.mobile)) continue;
+
+    if (isValidMobileToMatch && sNormMobile && sNormMobile.length >= 7 && sNormMobile !== '0000000000' && sNormMobile === normMobile) {
+      isMobileDuplicate = true;
+      existingAccountName = existingAccountName || s.name || 'Operations Staff';
+      existingRole = existingRole || 'Operations Staff';
+    }
+
+    if (isValidEmailToMatch && sEmail && sEmail === normEmail) {
+      isEmailDuplicate = true;
+      existingAccountName = existingAccountName || s.name || 'Operations Staff';
+      existingRole = existingRole || 'Operations Staff';
+    }
+  }
+
+  // 2. Check production staff
+  for (const p of prodStaffList) {
+    if (!p) continue;
+    const pNormMobile = normalizeMobileNumber(p.mobile || p.mobile_number || p.phone);
+    const pEmail = cleanEmail(p.email);
+    if (pNormMobile && pNormMobile.length >= 7 && pNormMobile !== '0000000000') activeStaffMobiles.add(pNormMobile);
+    if (pEmail && pEmail.includes('@')) activeStaffEmails.add(pEmail);
+
+    if (isExcluded(p.staff_id || p.id || p.auth_user_id, p.email, p.mobile)) continue;
+
+    if (isValidMobileToMatch && pNormMobile && pNormMobile.length >= 7 && pNormMobile !== '0000000000' && pNormMobile === normMobile) {
+      isMobileDuplicate = true;
+      existingAccountName = existingAccountName || p.name || 'Production Staff';
+      existingRole = existingRole || 'Production Staff';
+    }
+
+    if (isValidEmailToMatch && pEmail && pEmail === normEmail) {
+      isEmailDuplicate = true;
+      existingAccountName = existingAccountName || p.name || 'Production Staff';
+      existingRole = existingRole || 'Production Staff';
+    }
+  }
+
+  // 3. Check users (excluding orphaned staff accounts that have no active staff record)
+  for (const u of usersList) {
+    if (!u) continue;
+    if (isExcluded(u.id || u.auth_user_id, u.email, u.mobile)) continue;
+
+    const uRole = (u.role || '').trim();
+    const isOpsRole = uRole === 'Operation Staff' || uRole === 'Operations Team';
+    const isProdRole = uRole === 'Production Team' || uRole === 'Production Staff';
+    const uNormMobile = normalizeMobileNumber(u.mobile || u.phone);
+    const uEmail = cleanEmail(u.email);
+    const uUsername = cleanEmail(u.username);
+
+    // If an account in users has a staff role but is NOT in active staff lists, it is an orphan
+    if ((isOpsRole || isProdRole)) {
+      const hasActiveMobile = uNormMobile && activeStaffMobiles.has(uNormMobile);
+      const hasActiveEmail = (uEmail && activeStaffEmails.has(uEmail)) || (uUsername && activeStaffEmails.has(uUsername));
+      if (!hasActiveMobile && !hasActiveEmail) {
+        continue;
+      }
+    }
+
+    if (isValidMobileToMatch && uNormMobile && uNormMobile.length >= 7 && uNormMobile !== '0000000000' && uNormMobile === normMobile) {
+      isMobileDuplicate = true;
+      existingAccountName = existingAccountName || u.name || 'User';
+      existingRole = existingRole || u.role || 'Staff';
+    }
+
+    if (isValidEmailToMatch) {
+      if ((uEmail && uEmail === normEmail) || (uUsername && uUsername.includes('@') && uUsername === normEmail)) {
+        isEmailDuplicate = true;
+        existingAccountName = existingAccountName || u.name || 'User';
+        existingRole = existingRole || u.role || 'Staff';
       }
     }
   }
 
-  if (email) {
-    const normEmail = cleanEmail(email);
-    const normExcludeEmail = excludeEmail ? cleanEmail(excludeEmail) : null;
-    if (normEmail && (!normExcludeEmail || normEmail !== normExcludeEmail)) {
-      const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
+  // 2. Check operations staff
+  for (const s of opStaffList) {
+    if (!s) continue;
+    if (isExcluded(s.staff_id || s.id || s.auth_user_id, s.email, s.mobile)) continue;
 
-      for (const u of usersList) {
-        if (!u) continue;
-        const uEmail = cleanEmail(u.email);
-        if (uEmail && uEmail === normEmail) {
-          const uId = u.id ? String(u.id).trim().toLowerCase() : '';
-          const uAuthId = u.auth_user_id ? String(u.auth_user_id).trim().toLowerCase() : '';
-          if (cleanExclude && (uId === cleanExclude || uAuthId === cleanExclude)) continue;
-          return {
-            isUnique: false,
-            existingAccountName: u.name || u.full_name || 'User',
-            existingRole: u.role || 'Staff',
-            error: 'Email is already registered. Please use a different email.'
-          };
+    const isValidMobileToMatch = normMobile && normMobile.length >= 7 && normMobile !== '0000000000';
+    const isValidEmailToMatch = normEmail && normEmail.includes('@');
+
+    if (isValidMobileToMatch) {
+      const sNormMobile = normalizeMobileNumber(s.mobile || s.mobile_number || s.phone);
+      if (sNormMobile && sNormMobile.length >= 7 && sNormMobile !== '0000000000' && sNormMobile === normMobile) {
+        isMobileDuplicate = true;
+        existingAccountName = existingAccountName || s.name || 'Operations Staff';
+        existingRole = existingRole || 'Operations Staff';
+      }
+    }
+
+    if (isValidEmailToMatch) {
+      const sEmail = cleanEmail(s.email);
+      if (sEmail && sEmail === normEmail) {
+        isEmailDuplicate = true;
+        existingAccountName = existingAccountName || s.name || 'Operations Staff';
+        existingRole = existingRole || 'Operations Staff';
+      }
+    }
+  }
+
+  // 3. Check production staff
+  for (const p of prodStaffList) {
+    if (!p) continue;
+    if (isExcluded(p.staff_id || p.id || p.auth_user_id, p.email, p.mobile)) continue;
+
+    const isValidMobileToMatch = normMobile && normMobile.length >= 7 && normMobile !== '0000000000';
+    const isValidEmailToMatch = normEmail && normEmail.includes('@');
+
+    if (isValidMobileToMatch) {
+      const pNormMobile = normalizeMobileNumber(p.mobile || p.mobile_number || p.phone);
+      if (pNormMobile && pNormMobile.length >= 7 && pNormMobile !== '0000000000' && pNormMobile === normMobile) {
+        isMobileDuplicate = true;
+        existingAccountName = existingAccountName || p.name || 'Production Staff';
+        existingRole = existingRole || 'Production Staff';
+      }
+    }
+
+    if (isValidEmailToMatch) {
+      const pEmail = cleanEmail(p.email);
+      if (pEmail && pEmail === normEmail) {
+        isEmailDuplicate = true;
+        existingAccountName = existingAccountName || p.name || 'Production Staff';
+        existingRole = existingRole || 'Production Staff';
+      }
+    }
+  }
+
+  if (isMobileDuplicate && isEmailDuplicate) {
+    return {
+      isUnique: false,
+      isMobileDuplicate: true,
+      isEmailDuplicate: true,
+      existingAccountName,
+      existingRole,
+      error: 'This mobile number is already registered. This email address is already registered.'
+    };
+  }
+
+  if (isMobileDuplicate) {
+    return {
+      isUnique: false,
+      isMobileDuplicate: true,
+      isEmailDuplicate: false,
+      existingAccountName,
+      existingRole,
+      error: 'This mobile number is already registered.'
+    };
+  }
+
+  if (isEmailDuplicate) {
+    return {
+      isUnique: false,
+      isMobileDuplicate: false,
+      isEmailDuplicate: true,
+      existingAccountName,
+      existingRole,
+      error: 'This email address is already registered.'
+    };
+  }
+
+  return { isUnique: true, isMobileDuplicate: false, isEmailDuplicate: false };
+}
+
+export interface StaffDatabaseUniquenessResult {
+  isUnique: boolean;
+  isMobileDuplicate: boolean;
+  isEmailDuplicate: boolean;
+  queryFailed?: boolean;
+  error?: string;
+  mobileError?: string;
+  emailError?: string;
+  diagnostics?: {
+    normalizedMobile: string;
+    normalizedEmail: string;
+    productionStaffMatch: boolean;
+    usersMatch: boolean;
+    operationsStaffMatch: boolean;
+  };
+}
+
+/**
+ * Validates mobile and email against the ONLY 3 allowed tables:
+ * - production_staff
+ * - users
+ * - operations_staff
+ * Customer, client, lead, event, and booking records must NOT count as registered user accounts.
+ * Query failures produce a real checking error, never a false duplicate error.
+ */
+export async function verifyStaffDatabaseUniqueness(
+  supabaseClient: any,
+  mobile: string | undefined | null,
+  email: string | undefined | null,
+  excludeStaffId?: string | null
+): Promise<StaffDatabaseUniquenessResult> {
+  const normMobile = cleanPhone(mobile);
+  const normEmail = cleanEmail(email);
+
+  // Safe development diagnostics for logging normalized test values without exposing private data
+  console.log('[Safe Diagnostics] verifyStaffDatabaseUniqueness check started:', {
+    normalizedMobileLast4: normMobile && normMobile.length >= 4 ? `***${normMobile.slice(-4)}` : (normMobile || 'none'),
+    hasEmail: Boolean(normEmail),
+    excludeStaffId: excludeStaffId || null
+  });
+
+  if (!supabaseClient) {
+    return {
+      isUnique: false,
+      isMobileDuplicate: false,
+      isEmailDuplicate: false,
+      queryFailed: true,
+      error: "Unable to verify registration: Database client is not available."
+    };
+  }
+
+  // 1. Query production_staff (ONLY allowed table)
+  const { data: prodData, error: prodErr } = await supabaseClient
+    .from('production_staff')
+    .select('staff_id, name, mobile, email');
+  if (prodErr) {
+    console.error('[Safe Diagnostics] production_staff query failed:', prodErr.message);
+    return {
+      isUnique: false,
+      isMobileDuplicate: false,
+      isEmailDuplicate: false,
+      queryFailed: true,
+      error: `Database checking error in production staff: ${prodErr.message}`
+    };
+  }
+
+  // 2. Query users (ONLY allowed table)
+  const { data: usersData, error: usersErr } = await supabaseClient
+    .from('users')
+    .select('id, name, mobile, phone, email, role');
+  if (usersErr) {
+    console.error('[Safe Diagnostics] users query failed:', usersErr.message);
+    return {
+      isUnique: false,
+      isMobileDuplicate: false,
+      isEmailDuplicate: false,
+      queryFailed: true,
+      error: `Database checking error in user accounts: ${usersErr.message}`
+    };
+  }
+
+  // 3. Query operations_staff (ONLY allowed table)
+  const { data: opsData, error: opsErr } = await supabaseClient
+    .from('operations_staff')
+    .select('staff_id, name, mobile, email');
+  if (opsErr) {
+    console.error('[Safe Diagnostics] operations_staff query failed:', opsErr.message);
+    return {
+      isUnique: false,
+      isMobileDuplicate: false,
+      isEmailDuplicate: false,
+      queryFailed: true,
+      error: `Database checking error in operations staff: ${opsErr.message}`
+    };
+  }
+
+  const cleanExcludeId = excludeStaffId ? String(excludeStaffId).trim().toLowerCase() : null;
+
+  let prodMobileMatch = false;
+  let prodEmailMatch = false;
+  let usersMobileMatch = false;
+  let usersEmailMatch = false;
+  let opsMobileMatch = false;
+  let opsEmailMatch = false;
+
+  const isValidMobileToMatch = normMobile && normMobile.length >= 7 && normMobile !== '0000000000';
+  const isValidEmailToMatch = normEmail && normEmail.includes('@');
+
+  // Check production_staff
+  if (Array.isArray(prodData)) {
+    for (const p of prodData) {
+      const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : '';
+      if (cleanExcludeId && pId && pId === cleanExcludeId) continue;
+
+      if (isValidMobileToMatch) {
+        const pNorm = cleanPhone(p.mobile);
+        if (pNorm && pNorm.length >= 7 && pNorm !== '0000000000' && pNorm === normMobile) {
+          prodMobileMatch = true;
         }
       }
-
-      for (const s of opStaffList) {
-        if (!s) continue;
-        const sEmail = cleanEmail(s.email);
-        if (sEmail && sEmail === normEmail) {
-          const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
-          const sAuthId = s.auth_user_id ? String(s.auth_user_id).trim().toLowerCase() : '';
-          if (cleanExclude && (sId === cleanExclude || sAuthId === cleanExclude)) continue;
-          return {
-            isUnique: false,
-            existingAccountName: s.name || s.staff_name || 'Staff',
-            existingRole: 'Operations Staff',
-            error: 'Email is already registered. Please use a different email.'
-          };
-        }
-      }
-
-      for (const p of prodStaffList) {
-        if (!p) continue;
+      if (isValidEmailToMatch) {
         const pEmail = cleanEmail(p.email);
         if (pEmail && pEmail === normEmail) {
-          const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
-          const pAuthId = p.auth_user_id ? String(p.auth_user_id).trim().toLowerCase() : '';
-          if (cleanExclude && (pId === cleanExclude || pAuthId === cleanExclude)) continue;
-          return {
-            isUnique: false,
-            existingAccountName: p.name || p.staff_name || 'Staff',
-            existingRole: 'Production Staff',
-            error: 'Email is already registered. Please use a different email.'
-          };
+          prodEmailMatch = true;
         }
       }
     }
   }
 
-  return { isUnique: true };
+  // Build active staff sets from production_staff and operations_staff
+  const activeStaffMobiles = new Set<string>();
+  const activeStaffEmails = new Set<string>();
+  if (Array.isArray(prodData)) {
+    for (const p of prodData) {
+      const pm = cleanPhone(p.mobile);
+      const pe = cleanEmail(p.email);
+      if (pm && pm.length >= 7 && pm !== '0000000000') activeStaffMobiles.add(pm);
+      if (pe && pe.includes('@')) activeStaffEmails.add(pe);
+    }
+  }
+  if (Array.isArray(opsData)) {
+    for (const o of opsData) {
+      const om = cleanPhone(o.mobile);
+      const oe = cleanEmail(o.email);
+      if (om && om.length >= 7 && om !== '0000000000') activeStaffMobiles.add(om);
+      if (oe && oe.includes('@')) activeStaffEmails.add(oe);
+    }
+  }
+
+  // Check users (excluding orphaned staff accounts that have no active staff record in ops or prod tables)
+  if (Array.isArray(usersData)) {
+    for (const u of usersData) {
+      const uId = u.id ? String(u.id).trim().toLowerCase() : '';
+      if (cleanExcludeId && uId && uId === cleanExcludeId) continue;
+
+      const uRole = (u.role || '').trim();
+      const isOpsRole = uRole === 'Operation Staff' || uRole === 'Operations Team';
+      const isProdRole = uRole === 'Production Team' || uRole === 'Production Staff';
+      const uNorm1 = cleanPhone(u.mobile);
+      const uNorm2 = cleanPhone(u.phone);
+      const uEmail = cleanEmail(u.email);
+
+      // If user has a staff role, but their mobile/email is not present in prod or ops tables,
+      // it is an orphaned record from a deleted/stale staff member. Do not treat as registered!
+      if (isOpsRole || isProdRole) {
+        const hasActiveMobile = (uNorm1 && activeStaffMobiles.has(uNorm1)) || (uNorm2 && activeStaffMobiles.has(uNorm2));
+        const hasActiveEmail = uEmail && activeStaffEmails.has(uEmail);
+        if (!hasActiveMobile && !hasActiveEmail) {
+          continue;
+        }
+      }
+
+      if (isValidMobileToMatch) {
+        if (uNorm1 && uNorm1.length >= 7 && uNorm1 !== '0000000000' && uNorm1 === normMobile) {
+          usersMobileMatch = true;
+        }
+        if (uNorm2 && uNorm2.length >= 7 && uNorm2 !== '0000000000' && uNorm2 === normMobile) {
+          usersMobileMatch = true;
+        }
+      }
+      if (isValidEmailToMatch) {
+        if (uEmail && uEmail === normEmail) {
+          usersEmailMatch = true;
+        }
+      }
+    }
+  }
+
+  // Check operations_staff
+  if (Array.isArray(opsData)) {
+    for (const o of opsData) {
+      const oId = o.staff_id ? String(o.staff_id).trim().toLowerCase() : '';
+      if (cleanExcludeId && oId && oId === cleanExcludeId) continue;
+
+      if (isValidMobileToMatch) {
+        const oNorm = cleanPhone(o.mobile);
+        if (oNorm && oNorm.length >= 7 && oNorm !== '0000000000' && oNorm === normMobile) {
+          opsMobileMatch = true;
+        }
+      }
+      if (isValidEmailToMatch) {
+        const oEmail = cleanEmail(o.email);
+        if (oEmail && oEmail === normEmail) {
+          opsEmailMatch = true;
+        }
+      }
+    }
+  }
+
+  const isMobileDuplicate = prodMobileMatch || usersMobileMatch || opsMobileMatch;
+  const isEmailDuplicate = prodEmailMatch || usersEmailMatch || opsEmailMatch;
+
+  let error: string | undefined;
+  const mobileError = isMobileDuplicate ? "This mobile number is already registered." : undefined;
+  const emailError = isEmailDuplicate ? "This email address is already registered." : undefined;
+
+  if (isMobileDuplicate && isEmailDuplicate) {
+    error = "This mobile number is already registered. This email address is already registered.";
+  } else if (isMobileDuplicate) {
+    error = mobileError;
+  } else if (isEmailDuplicate) {
+    error = emailError;
+  }
+
+  // Safe development diagnostics record
+  console.log('[Safe Diagnostics] verifyStaffDatabaseUniqueness completed:', {
+    productionStaffMatch: prodMobileMatch ? 'match found' : 'no match',
+    usersMatch: usersMobileMatch ? 'match found' : 'no match',
+    operationsStaffMatch: opsMobileMatch ? 'match found' : 'no match',
+    isMobileDuplicate,
+    isEmailDuplicate,
+    isUnique: !isMobileDuplicate && !isEmailDuplicate,
+    queryFailed: false
+  });
+
+  return {
+    isUnique: !isMobileDuplicate && !isEmailDuplicate,
+    isMobileDuplicate,
+    isEmailDuplicate,
+    error,
+    mobileError,
+    emailError,
+    diagnostics: {
+      normalizedMobile: normMobile,
+      normalizedEmail: normEmail,
+      productionStaffMatch: prodMobileMatch,
+      usersMatch: usersMobileMatch,
+      operationsStaffMatch: opsMobileMatch
+    }
+  };
 }
 
 export function formatStaffErrorMessage(err: any): string {
   if (!err) return "An unexpected error occurred.";
   const msg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
-  if (msg.includes("duplicate key") || msg.includes("already exists") || msg.includes("unique")) {
-    if (msg.includes("mobile") || msg.includes("phone")) {
-      return "Mobile number already exists. Please use a different mobile number.";
+  const lower = msg.toLowerCase();
+  
+  if (lower.includes("already registered") || lower.includes("duplicate") || lower.includes("already exists") || lower.includes("unique")) {
+    const hasMobile = lower.includes("mobile") || lower.includes("phone");
+    const hasEmail = lower.includes("email");
+
+    if (hasMobile && hasEmail) {
+      return "This mobile number is already registered. This email address is already registered.";
     }
-    if (msg.includes("email")) {
-      return "Email already exists. Please use a different email address.";
+    if (hasMobile) {
+      return "This mobile number is already registered.";
     }
-    return "Staff with these details already exists. Please check mobile number and email.";
+    if (hasEmail) {
+      return "This email address is already registered.";
+    }
+    return msg;
   }
   return msg;
 }
@@ -1042,6 +1693,7 @@ export function getCustomers(leads: Lead[], orders: Order[], payments: Payment[]
 }
 
 export * from './utils/modalViewportHandler';
+export * from './utils/errorViewportHandler';
 import { ensureModalScrolledToTop } from './utils/modalViewportHandler';
 
 /**

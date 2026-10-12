@@ -14,7 +14,7 @@ import { ProjectDetailModal } from './ProjectDetailModal';
 import { AddNoteModal } from './AddNoteModal';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
-import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, triggerAutoScrollAndFocus } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, triggerAutoScrollAndFocus, processAndCompressImage } from '../utils';
 
 // Format ISO string to DD MMM YYYY (e.g. 12 Sep 2026, 05 Jan 2026)
 const formatISTDate = (isoStr?: string | null): string => {
@@ -193,102 +193,20 @@ const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
   );
 };
 
-// Image compression helper - converted to robust HEIC-friendly JPEG canvas resizer with transparent PNG fill fallback
+// Image compression helper - uses processAndCompressImage with solid white background fill to prevent blackout
 const compressImage = async (file: File): Promise<string> => {
-  let activeFile: File | Blob = file;
-  
-  const nameLower = file.name?.toLowerCase() || '';
-  const typeLower = file.type?.toLowerCase() || '';
-  
-  if (nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || typeLower.includes('heic') || typeLower.includes('heif')) {
-    try {
-      console.log('[HEIC Conversion] Converting HEIC/HEIF file to JPEG using heic2any...', file.name);
-      const converted = await heic2any({
-        blob: file,
-        toType: 'image/jpeg',
-        quality: 0.8
-      });
-      if (Array.isArray(converted)) {
-        activeFile = converted[0];
-      } else {
-        activeFile = converted;
-      }
-      console.log('[HEIC Conversion] Conversion successful!');
-    } catch (err) {
-      console.warn('[HEIC Conversion] heic2any failed to convert HEIC/HEIF, attempting fallback to raw file', err);
-    }
+  try {
+    const processed = await processAndCompressImage(file);
+    return processed.dataUrl;
+  } catch (err) {
+    console.warn('[compressImage] Processing error fallback:', err);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
   }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      const img = new Image();
-      
-      const drawToCanvas = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          if (!width || !height) {
-            resolve(dataUrl);
-            return;
-          }
-
-          const maxDim = 1200;
-          if (width > height && width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Fill with solid white background to avoid transparent PNGs turning black
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
-          } else {
-            resolve(dataUrl);
-          }
-        } catch (err) {
-          console.warn('Canvas compression failed, falling back to original image', err);
-          resolve(dataUrl);
-        }
-      };
-
-      img.onload = () => {
-        if (typeof img.decode === 'function') {
-          img.decode()
-            .then(drawToCanvas)
-            .catch((decodeErr) => {
-              console.warn('Image decode failed, drawing anyway', decodeErr);
-              drawToCanvas();
-            });
-        } else {
-          drawToCanvas();
-        }
-      };
-      
-      img.onerror = (err) => {
-        console.warn('Image load failed in compressImage, using original data url', err);
-        resolve(dataUrl);
-      };
-      
-      img.src = dataUrl;
-    };
-    reader.onerror = (err) => {
-      console.warn('FileReader failed, rejecting', err);
-      reject(err);
-    };
-    reader.readAsDataURL(activeFile);
-  });
 };
 
 // Helper to extract Raw Footage Drive Link matching the exact Final Consolidated link from Assign Editor notes / Operations verification

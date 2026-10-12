@@ -2,7 +2,7 @@ import React from 'react';
 import { OperationsLeads } from './operations/OperationsLeads';
 import { EquipmentManagement } from './operations/EquipmentManagement';
 import { OperationsStaffManagement } from './operations/OperationsStaffManagement';
-import { OperationsStaffRoster } from './operations/OperationsStaffRoster';
+import { OperationsStaffReport } from './operations/OperationsStaffRoster';
 import { EventScheduling } from './operations/EventScheduling';
 import { TeamAssignments } from './operations/TeamAssignments';
 import { NotificationsModule } from './NotificationsModule';
@@ -183,7 +183,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
         {activeSubTab === 'operations_calendar' && <OperationsCalendar />}
         {activeSubTab === 'equipment_management' && <EquipmentManagement />}
         {activeSubTab === 'operations_staff' && <OperationsStaffManagement />}
-        {activeSubTab === 'operations_staff_roster' && <OperationsStaffRoster />}
+        {activeSubTab === 'operations_staff_roster' && <OperationsStaffReport />}
         {activeSubTab === 'event_scheduling' && <EventScheduling />}
         {activeSubTab === 'team_assignments' && <TeamAssignments />}
         {activeSubTab === 'operations_notifications' && <NotificationsModule />}

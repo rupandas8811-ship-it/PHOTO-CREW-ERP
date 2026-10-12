@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
@@ -132,18 +133,30 @@ export default async function handler(req: any, res: any) {
         else if (cleanEmail) psQuery = psQuery.ilike('email', cleanEmail);
         else if (cleanMobile) psQuery = psQuery.eq('mobile', cleanMobile);
 
-        const { data: psRows } = await psQuery;
+        const { data: psRows, error: psFindErr } = await psQuery;
+        if (psFindErr) {
+          return res.status(500).json({ success: false, error: 'Failed to find production staff record' });
+        }
+
         if (psRows && psRows.length > 0) {
           for (const row of psRows) {
             let notesObj: any = {};
             try { if (row.notes) notesObj = JSON.parse(row.notes); } catch (e) {}
             if (targetAuthId) notesObj.auth_user_id = targetAuthId;
             const psUpdates: any = { notes: JSON.stringify(notesObj) };
-            if (password) psUpdates.Password = null;
-            await supabaseAdmin.from('production_staff').update(psUpdates).eq('staff_id', row.staff_id);
+            if (password) {
+              const passwordHash = crypto.createHash('sha256').update(password).digest('hex');
+              psUpdates.Password = passwordHash;
+            }
+            const { error: psUpdErr } = await supabaseAdmin.from('production_staff').update(psUpdates).eq('staff_id', row.staff_id);
+            if (psUpdErr) {
+              return res.status(500).json({ success: false, error: 'Failed to synchronize password in production staff table' });
+            }
           }
         }
-      } catch (e) {}
+      } catch (e: any) {
+        return res.status(500).json({ success: false, error: e.message || 'Error synchronizing production staff record' });
+      }
     }
     
     return res.status(200).json({ success: true, auth_user_id: targetAuthId, data: { user: targetAuthUser } });

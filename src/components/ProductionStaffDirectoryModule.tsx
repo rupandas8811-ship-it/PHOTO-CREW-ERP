@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { Staff, Production } from '../types';
@@ -9,12 +9,12 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
-import * as XLSX from 'xlsx';
-import { formatDateDDMMYY } from '../utils';
+import { formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage, verifyStaffDatabaseUniqueness, scrollToFirstError } from '../utils';
 
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
     productionStaff: staff = [], 
+    staff: opStaff = [],
     users = [],
     addProductionStaff: addStaff, 
     updateProductionStaff: updateStaff, 
@@ -41,6 +41,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formMobile, setFormMobile] = useState('');
   const [formPassword, setFormPassword] = useState('');
   const [showFormPassword, setShowFormPassword] = useState(true);
+  const [currentStaffPassword, setCurrentStaffPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
@@ -51,8 +53,16 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formStaffType, setFormStaffType] = useState<'In-House' | 'Freelancer' | ''>('');
   
   const [staffTypeError, setStaffTypeError] = useState(false);
+  const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  // Automatically bring error messages into view when validation fails
+  useEffect(() => {
+    if (formError || staffTypeError) {
+      scrollToFirstError();
+    }
+  }, [formError, staffTypeError]);
 
   const showToast = (type: 'success' | 'error', text: string) => {
     setToastMessage({ type, text });
@@ -94,6 +104,25 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormEmail(member.email);
     setFormPassword('');
     setShowFormPassword(false);
+    setShowCurrentPassword(true);
+
+    const pwd = getStaffCurrentPassword(member, users) || member.mobile || '';
+    setCurrentStaffPassword(pwd);
+    fetchStaffCurrentPassword(member, users).then(livePwd => {
+      if (livePwd) setCurrentStaffPassword(livePwd);
+    });
+    fetch('/api/auth/get-staff-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        staff_id: member.staff_id,
+        email: member.email,
+        mobile: member.mobile,
+        auth_id: member.auth_user_id || (member.notes && member.notes.includes('auth_user_id') ? JSON.parse(member.notes).auth_user_id : undefined)
+      })
+    }).then(r => r.json()).then(d => {
+      if (d?.password) setCurrentStaffPassword(d.password);
+    }).catch(() => null);
     // Use notes or a direct attribute for employee_id / city
     setFormEmployeeId((member as any).employee_id || member.staff_id);
     setFormCity((member as any).city || 'N/A');
@@ -139,29 +168,32 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       Skill: [formSpeciality]
     };
 
-    // Duplicate Check Validation
+    // Duplicate Check Validation against production_staff, users, operations_staff
     const finalEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
-    let existingUserIdForDuplicateCheck = null;
-    if (editingStaff) {
-      const match = users.find(u => 
-        (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
-        (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
-        (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
-      );
-      if (match) existingUserIdForDuplicateCheck = match.id;
-    }
-
-    const isDuplicate = users.find(u => 
-      u.id !== existingUserIdForDuplicateCheck && 
-      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
-       (formMobile.trim() && u.mobile === formMobile.trim()) ||
-       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
+    const uniquenessCheck = await verifyStaffDatabaseUniqueness(
+      supabaseClient,
+      formMobile.trim(),
+      finalEmail,
+      editingStaff?.staff_id || null
     );
 
-    if (isDuplicate) {
-      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
+    if (!uniquenessCheck.isUnique) {
+      let errMsg = uniquenessCheck.error;
+      if (uniquenessCheck.isMobileDuplicate && uniquenessCheck.isEmailDuplicate) {
+        errMsg = "This mobile number is already registered. This email address is already registered.";
+      } else if (uniquenessCheck.isMobileDuplicate) {
+        errMsg = "This mobile number is already registered.";
+      } else if (uniquenessCheck.isEmailDuplicate) {
+        errMsg = "This email address is already registered.";
+      } else {
+        errMsg = errMsg || "Registration validation failed.";
+      }
+      setFormError(errMsg);
+      showToast('error', errMsg);
       return;
     }
+
+    setFormError('');
 
     setIsSaving(true);
     try {
@@ -172,7 +204,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         // If a new password is provided, securely update it in the authentication system
         if (newPasswordValue) {
           if (newPasswordValue.length < 6) {
-            alert("Password must be at least 6 characters.");
+            setFormError("Password must be at least 6 characters.");
+            showToast('error', "Password must be at least 6 characters.");
             setIsSaving(false);
             return;
           }
@@ -206,6 +239,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
             setIsSaving(false);
             return;
           }
+          setCurrentStaffPassword(newPasswordValue);
         }
 
         // Update staff profile in database without storing plaintext passwords
@@ -220,93 +254,31 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         setEditingStaff(null);
       } else {
         // New Staff Mode
-        // 1. Create auth user
         const cleanPwd = formPassword.trim();
-        if (cleanPwd) {
-            const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
-            const authRes = await fetch('/api/auth/create-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: computedEmail,
-                mobile: formMobile.trim(),
-                password: cleanPwd,
-                name: formName.trim(),
-                role: 'Production Staff',
-                active: formStatus === 'Active'
-              })
-            });
-            
-            if (!authRes.ok) {
-              const text = await authRes.text();
-              let errData;
-              try { errData = JSON.parse(text); } catch (e) { throw new Error(`Server returned status ${authRes.status}: ${text.substring(0, 100)}`); }
-              throw new Error(errData.error || 'Failed to create authentication credentials');
-            }
-
-            const authData = await authRes.json();
-            if (!authData.success) {
-               throw new Error(authData.error);
-            }
-            if (authData.data?.user?.id) {
-               (payload as any).auth_user_id = authData.data.user.id;
-            }
-
-            // Also guarantee the password is saved in the users table
-            try {
-              const authUid = authData?.data?.user?.id || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
-              const { data: existingUser } = await supabaseClient
-                .from('users')
-                .select('id')
-                .or(`email.eq.${computedEmail},mobile.eq.${formMobile.trim()}`)
-                .limit(1);
-
-              if (existingUser && existingUser.length > 0) {
-                await supabaseClient.from('users').update({
-                  name: formName.trim(),
-                  mobile: formMobile.trim(),
-                  email: computedEmail,
-                  username: computedEmail,
-                  role: 'Production Staff',
-                  active: formStatus === 'Active',
-                  password: cleanPwd
-                }).eq('id', existingUser[0].id);
-              } else {
-                await supabaseClient.from('users').insert({
-                  id: authUid,
-                  name: formName.trim(),
-                  mobile: formMobile.trim(),
-                  email: computedEmail,
-                  username: computedEmail,
-                  role: 'Production Staff',
-                  active: formStatus === 'Active',
-                  created_at: new Date().toISOString(),
-                  password: cleanPwd
-                });
-              }
-            } catch (syncErr) {
-              console.warn("Direct users sync warning for production staff:", syncErr);
-            }
-        } else {
-            alert('Password is required for new staff to enable login.');
-            setIsSaving(false);
-            return;
+        const finalPwd = cleanPwd || `${formMobile.replace(/\D/g, '')}@123`;
+        if (cleanPwd && cleanPwd.length < 6) {
+          setFormError('Password must be at least 6 characters.');
+          showToast('error', 'Password must be at least 6 characters.');
+          setIsSaving(false);
+          return;
         }
 
-        const res = await addStaff({
+        await addStaff({
           ...payload,
-          password: cleanPwd,
-          Password: cleanPwd,
+          password: finalPwd,
+          Password: finalPwd,
           role: 'Production Staff',
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
         showToast('success', '✅ Production staff saved successfully.');
+        setIsFormOpen(false);
+        setEditingStaff(null);
       }
-      setIsFormOpen(false);
-      setEditingStaff(null);
     } catch (err: any) {
       console.warn("Failed saving staff", err?.message || err);
-      showToast('error', '❌ Failed to save Production Staff.');
+      const errMsg = formatStaffErrorMessage(err);
+      setFormError(errMsg);
+      showToast('error', errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -850,6 +822,12 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
               {/* Form Body */}
               <form onSubmit={handleFormSubmit} className="p-6 space-y-4 text-xs font-mono">
+                {formError && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Full Name */}
                   <div className="space-y-1.5">
@@ -860,7 +838,10 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       type="text"
                       placeholder="e.g. Rahul Sharma"
                       value={formName}
-                      onChange={(e) => setFormName(e.target.value)}
+                      onChange={(e) => {
+                        setFormName(e.target.value);
+                        if (formError) setFormError('');
+                      }}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                       required
                     />
@@ -899,12 +880,20 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       readOnly={Boolean(editingStaff)}
                       placeholder="e.g. +91 98765 43210"
                       value={formMobile}
-                      onChange={(e) => setFormMobile(e.target.value)}
-                      className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
-                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      onChange={(e) => {
+                        setFormMobile(e.target.value);
+                        if (formError) setFormError('');
+                      }}
+                      className={`w-full bg-zinc-900 border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : formError && formError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-zinc-850'
                       }`}
                       required
                     />
+                    {formError && formError.toLowerCase().includes('mobile') && (
+                      <p className="text-[11px] text-rose-400 font-sans mt-1">
+                        This mobile number is already registered.
+                      </p>
+                    )}
                   </div>
 
                   {/* WhatsApp Number */}
@@ -939,23 +928,31 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       readOnly={Boolean(editingStaff)}
                       placeholder="e.g. editor@crew.com"
                       value={formEmail}
-                      onChange={(e) => setFormEmail(e.target.value)}
-                      className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
-                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      onChange={(e) => {
+                        setFormEmail(e.target.value);
+                        if (formError) setFormError('');
+                      }}
+                      className={`w-full bg-zinc-900 border rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
+                        editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : formError && formError.toLowerCase().includes('email') ? 'border-rose-500/70' : 'border-zinc-850'
                       }`}
                       required
                     />
+                    {formError && formError.toLowerCase().includes('email') && (
+                      <p className="text-[11px] text-rose-400 font-sans mt-1">
+                        This email address is already registered.
+                      </p>
+                    )}
                   </div>
 
                   {/* Password */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
-                      Password {editingStaff ? '' : '*'}
+                      {editingStaff ? 'New Password' : 'Password'} {editingStaff ? '' : '*'}
                     </label>
                     <div className="relative">
                       <input
                         type={showFormPassword ? "text" : "password"}
-                        placeholder={editingStaff ? "Current password" : "Enter password"}
+                        placeholder={editingStaff ? "Enter new password" : "Enter password"}
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 pr-10 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
@@ -969,6 +966,25 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                         {showFormPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
+                    {/* Current Password Display */}
+                    {editingStaff && (
+                      <div className="mt-2.5 p-3 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between">
+                        <div className="text-xs font-mono text-zinc-400 flex items-center gap-2">
+                          <span className="text-[10px] uppercase font-bold text-zinc-500 font-mono tracking-wider">Current Password:</span>
+                          <span className="text-amber-400 font-bold select-all font-mono tracking-wider text-xs">
+                            {showCurrentPassword ? (currentStaffPassword || editingStaff.mobile || '••••••••') : '••••••••'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="text-zinc-400 hover:text-white transition-colors cursor-pointer p-1"
+                          title={showCurrentPassword ? "Hide current password" : "Show current password"}
+                        >
+                          {showCurrentPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* City */}

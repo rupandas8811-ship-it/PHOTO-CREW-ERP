@@ -33,7 +33,7 @@ import {
   OwnerStaffPerformanceReport
 } from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
-import { initGlobalModalViewportHandler, getAllMatchingOrderIds, calculateStaffActiveBookingsCount } from './utils';
+import { initGlobalModalViewportHandler, initGlobalErrorViewportHandler, getAllMatchingOrderIds, calculateStaffActiveBookingsCount } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, Camera, Video, Landmark, Shield, Users, User, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
@@ -88,9 +88,15 @@ const MainAppContent: React.FC = () => {
 
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
 
-  // Automatically ensure every opened modal/popup across all dashboards scrolls into viewport and resets internal scroll to top
+  // Automatically ensure every opened modal/popup across all dashboards scrolls into viewport and resets internal scroll to top,
+  // and automatically brings any error messages or invalid fields into view across all sections
   useEffect(() => {
-    return initGlobalModalViewportHandler();
+    const cleanupModal = initGlobalModalViewportHandler();
+    const cleanupError = initGlobalErrorViewportHandler();
+    return () => {
+      cleanupModal();
+      cleanupError();
+    };
   }, []);
 
   useEffect(() => {

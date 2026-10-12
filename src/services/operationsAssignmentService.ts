@@ -6,7 +6,8 @@ import {
   parseQtyAndText, 
   convertTimeToDbFormat,
   formatISTDate,
-  formatISTTime12Hour
+  formatISTTime12Hour,
+  processAndCompressImage
 } from '../utils';
 
 // ============================================================================
@@ -706,36 +707,34 @@ export async function uploadProofImage(params: {
   let contentType = 'image/jpeg';
   let base64DataUri: string | null = null;
 
-  if (photoInput instanceof File || photoInput instanceof Blob) {
-    blob = photoInput;
-    contentType = photoInput.type || 'image/jpeg';
-    try {
-      base64DataUri = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(photoInput);
-      });
-    } catch (e) {
-      console.warn('[OperationsService] FileReader fallback error:', e);
-    }
-  } else if (typeof photoInput === 'string' && photoInput.trim().startsWith('data:')) {
-    base64DataUri = photoInput.trim();
-    const parts = base64DataUri.split(';base64,');
-    contentType = parts[0].replace('data:', '') || 'image/jpeg';
-    const byteCharacters = atob(parts[1]);
-    const byteArrays = [];
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
+  try {
+    const processed = await processAndCompressImage(photoInput);
+    blob = processed.blob;
+    contentType = processed.contentType || 'image/jpeg';
+    base64DataUri = processed.dataUrl;
+  } catch (procErr) {
+    console.warn('[OperationsService] Image processing fallback:', procErr);
+    if (photoInput instanceof File || photoInput instanceof Blob) {
+      blob = photoInput;
+      contentType = photoInput.type || 'image/jpeg';
+    } else if (typeof photoInput === 'string' && photoInput.trim().startsWith('data:')) {
+      base64DataUri = photoInput.trim();
+      const parts = base64DataUri.split(';base64,');
+      contentType = parts[0].replace('data:', '') || 'image/jpeg';
+      const byteCharacters = atob(parts[1] || '');
+      const byteArrays = [];
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        byteArrays.push(new Uint8Array(byteNumbers));
       }
-      byteArrays.push(new Uint8Array(byteNumbers));
+      blob = new Blob(byteArrays, { type: contentType });
+    } else {
+      throw new Error('Invalid image input format. Must be File, Blob, or base64 data URI.');
     }
-    blob = new Blob(byteArrays, { type: contentType });
-  } else {
-    throw new Error('Invalid image input format. Must be File, Blob, or base64 data URI.');
   }
 
   const cleanAssignId = assignmentId.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -743,32 +742,35 @@ export async function uploadProofImage(params: {
   const fname = customFilename || `proof_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
   const storagePath = `${cleanAssignId}/${category}/${fname}`;
 
-  // 1. Try Direct Client Upload to 'operations' bucket first
+  // 1. Try Direct Client Upload to 'img' bucket first (publicly accessible)
   if (supabaseClient) {
     try {
+      const imgPath = `proofs/ops_${cleanAssignId}_${category}_${fname}`;
       const { data, error } = await supabaseClient.storage
-        .from('operations')
-        .upload(storagePath, blob, {
+        .from('img')
+        .upload(imgPath, blob, {
           contentType,
           upsert: true
         });
 
       if (!error && data) {
         const { data: publicData } = supabaseClient.storage
-          .from('operations')
-          .getPublicUrl(storagePath);
+          .from('img')
+          .getPublicUrl(data.path || imgPath);
 
         if (publicData?.publicUrl) {
           console.log('[OperationsService] Uploaded directly to Supabase storage:', publicData.publicUrl);
           return publicData.publicUrl;
         }
+      } else if (error) {
+        console.warn('[OperationsService] Direct storage upload warning:', error.message || error);
       }
     } catch (directErr) {
-      console.warn('[OperationsService] Direct storage upload warning:', directErr);
+      console.warn('[OperationsService] Direct storage upload exception:', directErr);
     }
   }
 
-  // 2. Server Proxy Upload fallback via /api/upload-proof
+  // 2. Server Proxy Upload fallback via /api/upload-proof (Admin with service role)
   if (base64DataUri) {
     try {
       const resp = await fetch('/api/upload-proof', {
@@ -776,9 +778,9 @@ export async function uploadProofImage(params: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           base64: base64DataUri,
-          fileName: storagePath,
+          fileName: `proofs/ops_${cleanAssignId}_${category}_${fname}`,
           contentType,
-          bucketName: 'operations'
+          bucketName: 'img'
         })
       });
       const resData = await resp.json();

@@ -8,7 +8,7 @@ import {
 import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
 
-import { formatTime12Hour, formatDateDDMMYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
+import { formatTime12Hour, formatDateDDMMYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage, scrollToFirstError } from "../../utils";
 
 const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
   if (!dateVal && (dateVal as any) !== 0) return null;
@@ -259,6 +259,13 @@ export const EquipmentManagement: React.FC = () => {
     equipment_type: 'Camera',
     status: 'Active' as string
   });
+
+  // Automatically bring error messages into view when validation fails
+  useEffect(() => {
+    if (formErrors.length > 0) {
+      scrollToFirstError();
+    }
+  }, [formErrors]);
 
   useEffect(() => {
     if (showGearForm || selectedEq || busyEquipment || showAddCategoryModal) {

@@ -38,6 +38,7 @@ export const SalesStaffManagementModule: React.FC = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [newEmployeeId, setNewEmployeeId] = useState('');
   const [newActive, setNewActive] = useState(true);
+  const [addFormError, setAddFormError] = useState('');
 
   // Edit Staff State
   const [editName, setEditName] = useState('');
@@ -170,10 +171,22 @@ export const SalesStaffManagementModule: React.FC = () => {
       prodStaffList: productionStaff
     });
     if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
+      let errMsg = uniquenessCheck.error;
+      if (uniquenessCheck.isMobileDuplicate && uniquenessCheck.isEmailDuplicate) {
+        errMsg = "This mobile number is already registered. This email address is already registered.";
+      } else if (uniquenessCheck.isMobileDuplicate) {
+        errMsg = "This mobile number is already registered.";
+      } else if (uniquenessCheck.isEmailDuplicate) {
+        errMsg = "This email address is already registered.";
+      } else {
+        errMsg = errMsg || "This mobile number is already registered. Please use a different number.";
+      }
+      setAddFormError(errMsg);
+      alert(errMsg);
       return;
     }
 
+    setAddFormError('');
     try {
       await addUser(newName, newEmail, newMobile, 'Sales Team', newActive, newPassword, newEmployeeId);
       
@@ -186,7 +199,9 @@ export const SalesStaffManagementModule: React.FC = () => {
       setNewActive(true);
       setShowAddForm(false);
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      const errMsg = formatStaffErrorMessage(err);
+      setAddFormError(errMsg);
+      alert(errMsg);
     }
   };
 
@@ -510,14 +525,31 @@ export const SalesStaffManagementModule: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleAddSubmit} className="p-6 space-y-4">
+              {addFormError && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs flex items-center gap-2">
+                  <span>{addFormError}</span>
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Full Name *</label>
-                  <input type="text" required value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" placeholder="e.g. John Doe" />
+                  <input type="text" required value={newName} onChange={e => { setNewName(e.target.value); if (addFormError) setAddFormError(''); }} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" placeholder="e.g. John Doe" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Mobile Number (Login ID) *</label>
-                  <input type="tel" required value={newMobile} onChange={e => setNewMobile(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" placeholder="10-digit mobile number" />
+                  <input 
+                    type="tel" 
+                    required 
+                    value={newMobile} 
+                    onChange={e => { setNewMobile(e.target.value); if (addFormError) setAddFormError(''); }} 
+                    className={`w-full bg-zinc-900 border rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors ${addFormError && addFormError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-zinc-800'}`} 
+                    placeholder="10-digit mobile number" 
+                  />
+                  {addFormError && addFormError.toLowerCase().includes('mobile') && (
+                    <p className="text-xs text-rose-400 mt-1">
+                      {addFormError}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Password *</label>

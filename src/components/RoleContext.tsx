@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber, saveCustomCategoryToStorage, getStoredCustomCategories, getAllMatchingOrderIds } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, checkGlobalStaffUniqueness, normalizeMobileNumber, saveCustomCategoryToStorage, getStoredCustomCategories, getAllMatchingOrderIds } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -3184,7 +3184,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               Promise.resolve({ data: [], error: null }),
               supabaseClient.from('production_specialties').select('*'),
               supabaseClient.from('editor_assignments').select('*'),
-              supabaseClient.from('production_staff').select('*').order('created_at', { ascending: true }),
+              supabaseClient.from('production_staff').select('*'),
               supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false }),
               supabaseClient.from('payment_history').select('*')
             ]);
@@ -3482,35 +3482,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         if (dbProdStaff) {
            const usersForStaff = dbUsers ? dbUsers.map(mapUserFieldsFromDb) : users;
-           setProductionStaff(prev => {
-             if (prev && prev.length > 0) {
-               const dbMap = new Map(dbProdStaff.map(item => [item.staff_id, item]));
-               const updatedList = prev.map(existing => {
-                 const dbItem = dbMap.get(existing.staff_id);
-                 if (dbItem) {
-                   const mappedItem: any = mapProductionStaffFromDb(dbItem);
-                   const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
-                   if (pwd) mappedItem.password = pwd;
-                   dbMap.delete(existing.staff_id);
-                   return mappedItem;
-                 }
-                 return existing;
-               });
-               for (const [_, newItem] of dbMap) {
-                 const mappedItem: any = mapProductionStaffFromDb(newItem);
-                 const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
-                 if (pwd) mappedItem.password = pwd;
-                 updatedList.push(mappedItem);
-               }
-               return updatedList;
-             }
-             return dbProdStaff.map(item => {
-               const mappedItem: any = mapProductionStaffFromDb(item);
-               const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
-               if (pwd) mappedItem.password = pwd;
-               return mappedItem;
-             });
-           });
+           setProductionStaff(dbProdStaff.map(item => {
+             const mappedItem: any = mapProductionStaffFromDb(item);
+             const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
+             if (pwd) mappedItem.password = pwd;
+             return mappedItem;
+           }));
         }
         
         if (dbNotifications) {
@@ -4371,7 +4348,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             active: matchingStaff.status !== 'Inactive'
           };
 
-          // Save to users table so future direct queries find them (do not store plaintext password)
+          // Save to users table so future direct queries find them
           try {
             await supabaseClient.from('users').upsert({
               id: newStaffUser.id,
@@ -4393,86 +4370,82 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       let authSuccess = false;
 
-      // 1. Primary Authentication: Authenticate with Supabase Auth (the authoritative authentication provider)
+      // 1. Authoritative check: verify credentials via Supabase Auth
       const candidateEmails = new Set<string>();
-      if (cleanInput.includes('@')) {
-        candidateEmails.add(cleanInput.trim().toLowerCase());
-      }
       for (const candidate of candidateUsers) {
         if (candidate.email) candidateEmails.add(candidate.email.trim().toLowerCase());
+        if (candidate.username && candidate.username.includes('@')) candidateEmails.add(candidate.username.trim().toLowerCase());
       }
-      if (matchingStaff?.email) {
-        candidateEmails.add(matchingStaff.email.trim().toLowerCase());
-      }
-      const matchedProdStaff = productionStaff.find(s => {
+      if (cleanInput.includes('@')) candidateEmails.add(cleanInput.toLowerCase());
+
+      // If matched production staff, add their email
+      let matchedProd = productionStaff.find(s => {
         const sEmail = (s.email || '').trim().toLowerCase();
         const sMobile = (s.mobile || '').replace(/\D/g, '');
         const sWa = (s.whatsapp_number || '').replace(/\D/g, '');
         if (sEmail && sEmail === cleanInput.toLowerCase()) return true;
         if (rawDigits.length >= 7 && (sMobile === rawDigits || sMobile.endsWith(last10) || rawDigits.endsWith(sMobile))) return true;
         if (rawDigits.length >= 7 && (sWa === rawDigits || sWa.endsWith(last10))) return true;
-        if (s.name && s.name.trim().toLowerCase() === cleanInput.toLowerCase()) return true;
         return false;
       });
-      if (matchedProdStaff?.email) {
-        candidateEmails.add(matchedProdStaff.email.trim().toLowerCase());
-      }
-      if (rawDigits.length >= 7) {
-        candidateEmails.add(`${rawDigits}@photocrew.com`);
-        if (last10.length === 10) candidateEmails.add(`${last10}@photocrew.com`);
-      }
 
-      let authFailedCredentials = false;
-      for (const loginEmail of candidateEmails) {
+      if (!matchedProd && supabaseClient) {
         try {
-          const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({
-            email: loginEmail,
-            password: cleanPassword
-          });
-
-          if (!authErr && authData?.session) {
-            authSuccess = true;
-            const matchedCand = candidateUsers.find(u => (u.email && u.email.toLowerCase() === loginEmail) || (u.id === authData.user?.id));
-            if (matchedCand) {
-              dbUser = matchedCand;
-            } else if (matchedProdStaff) {
-              dbUser = {
-                id: matchedProdStaff.staff_id || authData.user?.id || `STAFF-${Date.now()}`,
-                name: matchedProdStaff.name,
-                email: loginEmail,
-                username: loginEmail,
-                mobile: matchedProdStaff.mobile || '',
-                role: 'Production Staff',
-                active: matchedProdStaff.status !== 'Inactive'
-              };
-            } else if (candidateUsers.length > 0) {
-              dbUser = candidateUsers[0];
-            } else {
-              dbUser = {
-                id: authData.user?.id || `USER-${Date.now()}`,
-                name: authData.user?.user_metadata?.name || cleanInput,
-                email: loginEmail,
-                username: loginEmail,
-                mobile: authData.user?.user_metadata?.mobile || '',
-                role: (authData.user?.user_metadata?.role as UserRole) || 'Production Staff',
-                active: true
-              };
-            }
-            break;
-          } else if (authErr && authErr.message?.toLowerCase().includes('invalid login credentials')) {
-            // An account with this email exists in Supabase Auth, but the credentials failed!
-            authFailedCredentials = true;
+          const { data: dbPs } = await supabaseClient
+            .from('production_staff')
+            .select('*')
+            .or(`email.ilike.${cleanInput},mobile.ilike.%${last10}%`);
+          if (dbPs && dbPs.length > 0) {
+            matchedProd = mapProductionStaffFromDb(dbPs[0]);
           }
-        } catch (e: any) {
-          console.warn("Supabase Auth sign in failed:", e?.message || e);
+        } catch (e) {}
+      }
+
+      if (matchedProd?.email) {
+        candidateEmails.add(matchedProd.email.trim().toLowerCase());
+      }
+      if (matchedProd?.mobile) {
+        candidateEmails.add(`${matchedProd.mobile.replace(/\D/g, '')}@photocrew.com`);
+      }
+
+      if (candidateEmails.size > 0 && supabaseClient) {
+        for (const loginEmail of candidateEmails) {
+          try {
+            const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({
+              email: loginEmail,
+              password: cleanPassword
+            });
+
+            if (!authErr && authData?.session) {
+              authSuccess = true;
+              dbUser = candidateUsers.find(u => u.email?.trim().toLowerCase() === loginEmail || u.username?.trim().toLowerCase() === loginEmail) || null;
+              if (!dbUser && matchedProd) {
+                const staffEmail = matchedProd.email || `${matchedProd.mobile ? matchedProd.mobile.replace(/\D/g, '') : matchedProd.name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`;
+                dbUser = {
+                  id: matchedProd.staff_id || authData.user?.id || `STAFF-${Date.now()}`,
+                  name: matchedProd.name,
+                  email: staffEmail,
+                  username: staffEmail,
+                  mobile: matchedProd.mobile || '',
+                  role: 'Production Staff',
+                  active: matchedProd.status !== 'Inactive'
+                };
+              }
+              break;
+            }
+          } catch (e: any) {
+            console.warn("Supabase Auth sign in error:", e?.message || e);
+          }
         }
       }
 
-      // If Supabase Auth explicitly rejected credentials for an existing auth account,
-      // the password is WRONG. Do NOT fall back to old plaintext passwords!
-      if (!authSuccess && !authFailedCredentials) {
-        // Fallback only for legacy accounts that have not yet been migrated to Supabase Auth
+      // 2. Legacy fallback only for non-production accounts where Supabase Auth credentials have not been migrated
+      if (!authSuccess && candidateUsers.length > 0) {
         for (const candidate of candidateUsers) {
+          // Strictly forbid legacy fallback for Production Staff so old passwords are never accepted
+          if (candidate.role === 'Production Staff' || candidate.role === 'Production Team') {
+            continue;
+          }
           const storedPwd = String(candidate.password ?? '').trim();
           if (storedPwd !== '' && storedPwd === cleanPassword) {
             authSuccess = true;
@@ -7895,12 +7868,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
-    // Validate global mobile uniqueness
-    if (mobile) {
-      const uniqueCheck = checkGlobalMobileUnique(mobile, null, users, staff, productionStaff);
-      if (!uniqueCheck.isUnique) {
-        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
-      }
+    // Validate global mobile and email uniqueness
+    const uniqueCheck = checkGlobalStaffUniqueness({
+      mobile,
+      email: (email && email.trim() !== '') ? email.trim() : undefined,
+      excludeId: null,
+      usersList: users,
+      opStaffList: staff,
+      prodStaffList: productionStaff
+    });
+    if (!uniqueCheck.isUnique) {
+      throw new Error(uniqueCheck.error);
     }
 
     const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -7931,7 +7909,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
       } catch (authErr: any) {
         console.warn("Server auth create user error:", authErr);
-        if (authErr?.message && authErr.message.includes('already exists')) {
+        if (authErr?.message) {
           throw authErr;
         }
       }
@@ -7954,7 +7932,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const dbRes = await pushUpsert('users', { ...newUser, id: mapToDbUserId(finalAuthId) });
     if (!dbRes.success) {
       if (dbRes.error && dbRes.error.includes('users_email_key')) {
-        throw new Error("This email address is already in use by another user.");
+        throw new Error("This email address is already registered.");
       }
       throw new Error(dbRes.error || "Failed to save user to database");
     }
@@ -7986,12 +7964,21 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // Validate global mobile uniqueness if mobile is being modified
-    if (updates.mobile && (!targetUser || cleanPhone(updates.mobile) !== cleanPhone(targetUser.mobile))) {
-      const uniqueCheck = checkGlobalMobileUnique(updates.mobile, id, users, staff, productionStaff);
-      if (!uniqueCheck.isUnique) {
-        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
-      }
+    // Validate global uniqueness if mobile or email is being modified
+    const candidateMobile = updates.mobile !== undefined ? updates.mobile : targetUser?.mobile;
+    const candidateEmail = updates.email !== undefined ? updates.email : targetUser?.email;
+    const uniqueCheck = checkGlobalStaffUniqueness({
+      mobile: candidateMobile,
+      email: candidateEmail,
+      excludeId: id,
+      excludeEmail: targetUser?.email,
+      excludeMobile: targetUser?.mobile,
+      usersList: users,
+      opStaffList: staff,
+      prodStaffList: productionStaff
+    });
+    if (!uniqueCheck.isUnique) {
+      throw new Error(uniqueCheck.error);
     }
 
     const safeName = updates.name !== undefined ? updates.name : (targetUser?.name || '');
@@ -8300,27 +8287,44 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
-    // Validate global mobile uniqueness
-    if (member.mobile) {
-      const uniqueCheck = checkGlobalMobileUnique(member.mobile, null, users, staff, productionStaff);
-      if (!uniqueCheck.isUnique) {
-        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
-      }
+    // Validate global mobile and email uniqueness
+    const uniqueCheck = checkGlobalStaffUniqueness({
+      mobile: member.mobile,
+      email: member.email,
+      excludeId: null,
+      usersList: users,
+      opStaffList: staff,
+      prodStaffList: productionStaff
+    });
+    if (!uniqueCheck.isUnique) {
+      throw new Error(uniqueCheck.error);
     }
 
-    const newEmailClean = cleanEmail(member.email);
-    for (const s of staff) {
-      const existingEmailClean = cleanEmail(s.email);
-      if (newEmailClean && existingEmailClean && newEmailClean === existingEmailClean) {
-        throw new Error("This email is already registered.");
-      }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    const staffId = (member as any).staff_id && uuidRegex.test(String((member as any).staff_id))
+      ? (member as any).staff_id
+      : (crypto.randomUUID ? crypto.randomUUID() : `55555555-5555-5555-5555-${Math.floor(100000000000 + Math.random() * 900000000000)}`);
+
+    const allowedOpsRoles = ['Photographer', 'Videographer', 'Assistant', 'Manager'];
+    let safeRole = member.role || 'Photographer';
+    if (!allowedOpsRoles.includes(safeRole)) {
+      const rLower = String(safeRole).toLowerCase();
+      if (rLower.includes('video')) safeRole = 'Videographer';
+      else if (rLower.includes('assist')) safeRole = 'Assistant';
+      else if (rLower.includes('manag')) safeRole = 'Manager';
+      else safeRole = 'Photographer';
     }
 
-    const staffId = `STF-${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanWhatsapp = member.whatsapp_number
+      ? Number(String(member.whatsapp_number).replace(/\D/g, '').slice(-10))
+      : (member.mobile ? Number(cleanPhone(member.mobile)) : null);
+
     const timestamp = new Date().toISOString();
     const newStaff: Staff = {
       ...member,
       staff_id: staffId,
+      role: safeRole as any,
+      whatsapp_number: cleanWhatsapp as any,
       created_by: currentUserName,
       updated_by: currentUserName,
       created_at: timestamp,
@@ -8339,6 +8343,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              staff_id: staffId,
               email: emailVal,
               password: pwd,
               name: member.name,
@@ -8442,9 +8447,51 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   const deleteStaff = async (staffId: string) => {
     const prevStaff = [...staff];
+    const target = staff.find((s) => s.staff_id === staffId);
     setStaff((prev) => prev.filter((s) => s.staff_id !== staffId));
     try {
       await pushDelete('operations_staff', 'staff_id', staffId);
+      
+      // Cleanup corresponding user record and authentication
+      const targetMobile = target?.mobile ? cleanPhone(target.mobile) : null;
+      const targetEmail = target?.email ? cleanEmail(target.email) : null;
+      const targetAuthId = (target as any)?.auth_user_id || null;
+
+      try {
+        await pushDelete('users', 'id', staffId);
+        if (targetAuthId) {
+          await pushDelete('users', 'id', targetAuthId);
+        }
+        if (targetEmail) {
+          await pushDelete('users', 'email', targetEmail);
+        }
+        if (targetMobile && targetMobile.length >= 7) {
+          await pushDelete('users', 'mobile', targetMobile);
+        }
+      } catch (_) {}
+
+      // Delete from server auth endpoint
+      try {
+        await fetch('/api/auth/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            staff_id: staffId,
+            auth_id: targetAuthId,
+            email: targetEmail,
+            mobile: targetMobile
+          })
+        });
+      } catch (_) {}
+
+      // Cleanup local users state
+      setUsers((prev) => prev.filter(u => {
+        if (u.id === staffId || (targetAuthId && u.id === targetAuthId)) return false;
+        if (targetMobile && cleanPhone(u.mobile) === targetMobile) return false;
+        if (targetEmail && cleanEmail(u.email) === targetEmail) return false;
+        return true;
+      }));
+
       logActivity(`Removed Staff Member: ${staffId}`, 'StaffManagement', staffId);
     } catch (err: any) {
       setStaff(prevStaff);
@@ -8453,20 +8500,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addProductionStaff = async (member: Omit<Staff, "staff_id">) => {
-    // Validate global mobile uniqueness
-    if (member.mobile) {
-      const uniqueCheck = checkGlobalMobileUnique(member.mobile, null, users, staff, productionStaff);
-      if (!uniqueCheck.isUnique) {
-        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
-      }
-    }
-
-    const newEmailClean = cleanEmail(member.email);
-    for (const s of productionStaff) {
-      const existingEmailClean = cleanEmail(s.email);
-      if (newEmailClean && existingEmailClean && newEmailClean === existingEmailClean) {
-        throw new Error("This email is already registered.");
-      }
+    // Validate global mobile and email uniqueness
+    const uniqueCheck = checkGlobalStaffUniqueness({
+      mobile: member.mobile,
+      email: member.email,
+      excludeId: null,
+      usersList: users,
+      opStaffList: staff,
+      prodStaffList: productionStaff
+    });
+    if (!uniqueCheck.isUnique) {
+      throw new Error(uniqueCheck.error);
     }
 
     const staffId = `STF-${Math.floor(10000 + Math.random() * 90000)}`;
@@ -8501,6 +8545,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              staff_id: staffId,
               email: emailVal,
               password: pwd,
               name: member.name,
@@ -8568,38 +8613,58 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     delete (dbPayload as any).phone;
     delete (dbPayload as any).mobile_number;
     delete (dbPayload as any).email;
-    delete (dbPayload as any).password;
-    delete (dbPayload as any).Password;
 
     const pwd = ((updates as any).password || (updates as any).Password || '').trim();
+    if (pwd) {
+      (updatedWithMetadata as any).password = pwd;
+      (updatedWithMetadata as any).Password = pwd;
+      (dbPayload as any).password = pwd;
+      (dbPayload as any).Password = pwd;
+    }
 
     const dbUpdates = await mapProductionStaffToDb(dbPayload);
     delete (dbUpdates as any).mobile;
     delete (dbUpdates as any).phone;
     delete (dbUpdates as any).mobile_number;
     delete (dbUpdates as any).email;
-    delete (dbUpdates as any).password;
-    delete (dbUpdates as any).Password;
+    if (pwd) {
+      dbUpdates.Password = pwd;
+      dbUpdates.password = pwd;
+    }
 
     const res = await pushUpdate('production_staff', 'staff_id', staffId, dbUpdates);
     if (res.success) {
       logActivity(`Updated Production Staff Member details: ${staffId}`, 'StaffManagement', staffId);
       if (pwd) {
-        // Delegate password update securely via server auth endpoint to update Supabase Auth
-        const authId = (existing as any)?.auth_user_id || (existing?.notes && existing.notes.includes('auth_user_id') ? JSON.parse(existing.notes).auth_user_id : null);
+        const targetMobile = existing?.mobile;
+        const targetEmail = (existing?.email || '').trim().toLowerCase();
         try {
-          await fetch('/api/auth/update-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              auth_id: authId,
-              staff_id: staffId,
-              email: existing?.email,
-              mobile: existing?.mobile,
-              password: pwd,
-              role: 'Production Staff'
-            })
-          }).catch(() => null);
+          if (targetMobile) {
+            await pushUpdate('users', 'mobile', targetMobile, { password: pwd, role: 'Production Staff' });
+          }
+          if (targetEmail) {
+            await pushUpdate('users', 'email', targetEmail, { password: pwd, role: 'Production Staff' });
+          }
+          // Also sync to auth if auth_user_id exists
+          const authId = (existing as any)?.auth_user_id || (existing?.notes && existing.notes.includes('auth_user_id') ? JSON.parse(existing.notes).auth_user_id : null);
+          if (authId) {
+            await fetch('/api/auth/update-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                auth_id: authId,
+                password: pwd,
+                role: 'Production Staff'
+              })
+            }).catch(() => null);
+          }
+          setUsers((prev) => prev.map(u => {
+            const cleanM = cleanPhone(targetMobile);
+            if ((cleanM && cleanPhone(u.mobile) === cleanM) || (targetEmail && u.email && u.email.toLowerCase() === targetEmail)) {
+              return { ...u, password: pwd, role: 'Production Staff' };
+            }
+            return u;
+          }));
         } catch (err) {
           console.warn("updateProductionStaff password sync warning:", err);
         }
@@ -8613,9 +8678,50 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   const deleteProductionStaff = async (staffId: string) => {
     const prevStaffList = [...productionStaff];
+    const target = productionStaff.find((s) => s.staff_id === staffId);
     setProductionStaff((prev) => prev.filter((s) => s.staff_id !== staffId));
     const res = await pushDelete('production_staff', 'staff_id', staffId);
     if (res.success) {
+      // Cleanup corresponding user record and authentication
+      const targetMobile = target?.mobile ? cleanPhone(target.mobile) : null;
+      const targetEmail = target?.email ? cleanEmail(target.email) : null;
+      const targetAuthId = (target as any)?.auth_user_id || null;
+
+      try {
+        await pushDelete('users', 'id', staffId);
+        if (targetAuthId) {
+          await pushDelete('users', 'id', targetAuthId);
+        }
+        if (targetEmail) {
+          await pushDelete('users', 'email', targetEmail);
+        }
+        if (targetMobile && targetMobile.length >= 7) {
+          await pushDelete('users', 'mobile', targetMobile);
+        }
+      } catch (_) {}
+
+      // Delete from server auth endpoint
+      try {
+        await fetch('/api/auth/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            staff_id: staffId,
+            auth_id: targetAuthId,
+            email: targetEmail,
+            mobile: targetMobile
+          })
+        });
+      } catch (_) {}
+
+      // Cleanup local users state
+      setUsers((prev) => prev.filter(u => {
+        if (u.id === staffId || (targetAuthId && u.id === targetAuthId)) return false;
+        if (targetMobile && cleanPhone(u.mobile) === targetMobile) return false;
+        if (targetEmail && cleanEmail(u.email) === targetEmail) return false;
+        return true;
+      }));
+
       logActivity(`Deleted Production Staff Member: ${staffId}`, 'StaffManagement', staffId);
     } else {
       setProductionStaff(prevStaffList);

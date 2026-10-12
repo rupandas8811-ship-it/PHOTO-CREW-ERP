@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { Staff, UserRole } from '../types';
-import { triggerAutoScrollAndFocus } from '../utils';
+import { triggerAutoScrollAndFocus, checkGlobalStaffUniqueness, formatStaffErrorMessage, scrollToFirstError } from '../utils';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
   Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
@@ -13,11 +13,19 @@ export const StaffManagementModule: React.FC = () => {
   const { 
     staff, addStaff, updateStaff, production, currentRole,
     specialities = [], addSpeciality, updateSpeciality, deactivateSpeciality,
-    addUser, resetUserPassword, users
+    addUser, resetUserPassword, users, productionStaff = []
   } = useRole();
   
   // Tabs: 'dashboard' | 'list' | 'add' | 'specialities'
   const [activeSubTab, setActiveSubTab] = useState<'dashboard' | 'list' | 'add' | 'specialities'>('dashboard');
+  const [formError, setFormError] = useState('');
+
+  // Automatically scroll to error when validation error appears
+  useEffect(() => {
+    if (formError) {
+      scrollToFirstError();
+    }
+  }, [formError]);
   
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +144,35 @@ export const StaffManagementModule: React.FC = () => {
       Skill: skills
     };
 
+    if (!editingStaffId) {
+      const uniquenessCheck = checkGlobalStaffUniqueness({
+        mobile,
+        email,
+        excludeId: null,
+        usersList: users,
+        opStaffList: staff,
+        prodStaffList: productionStaff
+      });
+
+      if (!uniquenessCheck.isUnique) {
+        let errMsg = uniquenessCheck.error;
+        if (uniquenessCheck.isMobileDuplicate && uniquenessCheck.isEmailDuplicate) {
+          errMsg = "This mobile number is already registered. This email address is already registered.";
+        } else if (uniquenessCheck.isMobileDuplicate) {
+          errMsg = "This mobile number is already registered.";
+        } else if (uniquenessCheck.isEmailDuplicate) {
+          errMsg = "This email address is already registered.";
+        } else {
+          errMsg = errMsg || "This mobile number is already registered. Please use a different number.";
+        }
+        setFormError(errMsg);
+        alert(errMsg);
+        return;
+      }
+    }
+
+    setFormError('');
+
     try {
       if (editingStaffId) {
         const { mobile: _m, email: _e, ...safePayload } = payload;
@@ -240,7 +277,9 @@ export const StaffManagementModule: React.FC = () => {
 
       setActiveSubTab('list');
     } catch (err: any) {
-      alert(err.message || 'Failed to register or update staff member.');
+      const errMsg = formatStaffErrorMessage(err);
+      setFormError(errMsg);
+      alert(errMsg);
     }
   };
 
@@ -766,6 +805,13 @@ export const StaffManagementModule: React.FC = () => {
             STAFF DIRECTORY ENROLLMENT PACK
           </h2>
 
+          {formError && (
+            <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>{formError}</span>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             
             {/* Name */}
@@ -779,7 +825,7 @@ export const StaffManagementModule: React.FC = () => {
                 required
                 placeholder="e.g. Liam Campbell"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => { setName(e.target.value); if (formError) setFormError(''); }}
                 className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none"
               />
             </div>
@@ -804,7 +850,7 @@ export const StaffManagementModule: React.FC = () => {
                 readOnly={Boolean(editingStaffId)}
                 placeholder="e.g. liam@photocrew.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); if (formError) setFormError(''); }}
                 className={`w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono ${
                   editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
                 }`}
@@ -831,11 +877,16 @@ export const StaffManagementModule: React.FC = () => {
                 readOnly={Boolean(editingStaffId)}
                 placeholder="e.g. +1 (555) 765-4321"
                 value={mobile}
-                onChange={(e) => setMobile(e.target.value)}
-                className={`w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono ${
-                  editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                onChange={(e) => { setMobile(e.target.value); if (formError) setFormError(''); }}
+                className={`w-full bg-zinc-900 border rounded-xl p-3 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono ${
+                  editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : formError && formError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-zinc-800'
                 }`}
               />
+              {formError && formError.toLowerCase().includes('mobile') && (
+                <p className="text-xs text-rose-400 mt-1">
+                  {formError}
+                </p>
+              )}
             </div>
 
             {/* Account Login Password */}

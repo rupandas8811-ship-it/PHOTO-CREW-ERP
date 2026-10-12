@@ -9,7 +9,7 @@ import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseClient } from '../../supabaseClient';
-import { checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../../utils';
+import { checkGlobalStaffUniqueness, formatStaffErrorMessage, verifyStaffDatabaseUniqueness, cleanPhone, cleanEmail, scrollToFirstError } from '../../utils';
 import { parseDateTimeToTimestamp } from '../ui/ListSortFilter';
 
 export const OperationsStaffManagement: React.FC = () => {
@@ -26,6 +26,16 @@ export const OperationsStaffManagement: React.FC = () => {
   const [currentStaffPassword, setCurrentStaffPassword] = useState('');
   const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
+  const [mobileError, setMobileError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+
+  // Automatically scroll modal viewport to error message whenever form validation fails
+  useEffect(() => {
+    if (formError || mobileError || emailError) {
+      scrollToFirstError();
+    }
+  }, [formError, mobileError, emailError]);
 
   // Close skills dropdown on outside click or Escape
   useEffect(() => {
@@ -91,7 +101,7 @@ export const OperationsStaffManagement: React.FC = () => {
   };
   const [form, setForm] = useState({
     name: '',
-    role: 'Lead Photographer',
+    role: 'Photographer',
     email: '',
     mobile: '',
     whatsapp_number: '',
@@ -163,7 +173,7 @@ export const OperationsStaffManagement: React.FC = () => {
     setFormError('');
     setForm({
       name: '',
-      role: 'Lead Photographer',
+      role: 'Photographer',
       email: '',
       mobile: '',
       whatsapp_number: '',
@@ -211,65 +221,89 @@ export const OperationsStaffManagement: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.mobile) {
-      alert('Please fill out the name and mobile fields.');
+    setFormError('');
+    setMobileError('');
+    setEmailError('');
+
+    if (!form.name || !form.name.trim()) {
+      setFormError('Please enter the staff member\'s full name.');
       return;
     }
 
-    const mobileRegex = /^[0-9+\s-]{10,}$/;
-    if (!mobileRegex.test(form.mobile)) {
-      alert('Please enter a valid mobile number.');
+    if (!form.mobile || !form.mobile.trim()) {
+      setMobileError('Please enter a mobile number.');
+      setFormError('Please enter a mobile number.');
       return;
     }
 
-    // Auto-generate email and set notes to comma-separated skills
-    const finalEmail = form.email || `${form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
+    const cleanMob = cleanPhone(form.mobile);
+    if (!cleanMob || cleanMob.length < 10) {
+      setMobileError('Please enter a valid 10-digit mobile number.');
+      setFormError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    // Auto-generate email based on unique mobile or name
+    const finalEmail = form.email?.trim() || `${cleanMob || form.name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'staff'}@photocrew.com`;
     const finalSkillsStr = skills.join(', ');
 
     // Extract password out of submission payload for the staff table
     const { password, ...payloadWithoutPassword } = form;
-    
+    const cleanPwd = (password || '').trim();
+
+    if (cleanPwd && cleanPwd.length < 6) {
+      setFormError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    const finalPassword = cleanPwd || (!editingId ? `${cleanMob}@123` : '');
+
     const submissionPayload = {
       ...payloadWithoutPassword,
+      name: form.name.trim(),
+      mobile: cleanMob,
       email: finalEmail,
       Skill: finalSkillsStr,
       Staff_Type: form.staff_type
     };
 
-    // Duplicate Check Validation
-    const originalStaffForDuplicateCheck = editingId ? staff.find(s => s.staff_id === editingId) : null;
-    
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: form.mobile,
-      email: form.email || (editingId ? undefined : finalEmail),
-      excludeId: editingId,
-      excludeEmail: originalStaffForDuplicateCheck?.email,
-      excludeMobile: originalStaffForDuplicateCheck?.mobile,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff || []
-    });
-
-    if (!uniquenessCheck.isUnique) {
-      const errMsg = uniquenessCheck.error || "Duplicate staff details detected. Mobile number or email is already registered.";
-      setFormError(errMsg);
-      alert(errMsg);
-      setIsSaving(false);
-      return;
-    }
-
+    setIsSaving(true);
     try {
-      setIsSaving(true);
+      // Duplicate Check Validation against production_staff, users, operations_staff
+      const uniquenessCheck = await verifyStaffDatabaseUniqueness(
+        supabaseClient,
+        cleanMob,
+        form.email || (editingId ? undefined : finalEmail),
+        editingId || null
+      );
+
+      if (uniquenessCheck.queryFailed) {
+        setFormError(uniquenessCheck.error || "Database query failed while checking staff uniqueness.");
+        setIsSaving(false);
+        return;
+      }
+
+      if (!uniquenessCheck.isUnique) {
+        if (uniquenessCheck.isMobileDuplicate && uniquenessCheck.isEmailDuplicate) {
+          setMobileError("This mobile number is already registered.");
+          setEmailError("This email address is already registered.");
+          setFormError("This mobile number is already registered. This email address is already registered.");
+        } else if (uniquenessCheck.isMobileDuplicate) {
+          setMobileError("This mobile number is already registered.");
+          setFormError("This mobile number is already registered.");
+        } else if (uniquenessCheck.isEmailDuplicate) {
+          setEmailError("This email address is already registered.");
+          setFormError("This email address is already registered.");
+        } else {
+          setFormError(uniquenessCheck.error || "Registration validation failed.");
+        }
+        setIsSaving(false);
+        return;
+      }
+
       if (editingId) {
         const originalStaff = staff.find(s => s.staff_id === editingId);
         const targetEmail = originalStaff?.email || form.email || finalEmail;
-        const cleanPwd = (password || '').trim();
-
-        if (cleanPwd && cleanPwd.length < 8) {
-          alert('Password must be at least 8 characters long.');
-          setIsSaving(false);
-          return;
-        }
 
         let targetUserId = null;
         if (originalStaff) {
@@ -310,20 +344,17 @@ export const OperationsStaffManagement: React.FC = () => {
                 auth_id: targetUserId,
                 staff_id: editingId,
                 email: targetEmail,
-                mobile: originalStaff?.mobile || form.mobile,
+                mobile: originalStaff?.mobile || cleanMob,
                 password: cleanPwd,
-                name: form.name,
+                name: form.name.trim(),
                 role: 'Operation Staff'
               })
             });
             if (!authRes.ok) {
               const errData = await authRes.json().catch(() => ({}));
               console.warn("Auth endpoint notice:", errData);
-              // Only alert if it's a client error (e.g. invalid format or duplicate), not internal GoTrue failure
               if (errData.error && !errData.error.toLowerCase().includes('database error') && !errData.error.toLowerCase().includes('unexpected_failure')) {
-                alert(`Failed to update authentication password: ${errData.error}`);
-                setIsSaving(false);
-                return;
+                setFormError(`Notice on authentication password update: ${errData.error}`);
               }
             } else {
               setCurrentStaffPassword(cleanPwd);
@@ -334,7 +365,7 @@ export const OperationsStaffManagement: React.FC = () => {
         }
 
         const userUpdates: any = {
-          name: form.name
+          name: form.name.trim()
         };
         if (cleanPwd) {
           userUpdates.password = cleanPwd;
@@ -375,83 +406,41 @@ export const OperationsStaffManagement: React.FC = () => {
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       } else {
-        // Create auth user & public.users record
-        const authEmail = finalEmail;
-        const cleanPassword = (password || '').trim();
-        let authUserId: string | null = null;
-
-        if (cleanPassword) {
-          try {
-            const authRes = await fetch('/api/auth/create-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: authEmail,
-                password: cleanPassword,
-                name: form.name,
-                role: 'Operation Staff',
-                mobile: form.mobile,
-                active: form.status === 'Active'
-              })
-            });
-            const authData = await authRes.json();
-            if (authData.success && authData.data?.user?.id) {
-              authUserId = authData.data.user.id;
-            }
-          } catch (authErr) {
-            console.warn("Server create-user call warning:", authErr);
-          }
-        }
-
-        const finalUserId = authUserId || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
-
-        // Synchronize directly into users table with the exact password
-        try {
-          const { data: existingUsers } = await supabaseClient
-            .from('users')
-            .select('id')
-            .or(`email.eq.${authEmail},mobile.eq.${form.mobile}`)
-            .limit(1);
-
-          if (existingUsers && existingUsers.length > 0) {
-            await supabaseClient.from('users').update({
-              name: form.name,
-              mobile: form.mobile,
-              email: authEmail,
-              username: authEmail,
-              role: 'Operation Staff',
-              active: form.status === 'Active',
-              password: cleanPassword
-            }).eq('id', existingUsers[0].id);
-          } else {
-            await supabaseClient.from('users').insert({
-              id: finalUserId,
-              name: form.name,
-              mobile: form.mobile,
-              email: authEmail,
-              username: authEmail,
-              role: 'Operation Staff',
-              active: form.status === 'Active',
-              created_at: new Date().toISOString(),
-              password: cleanPassword
-            });
-          }
-        } catch (dbErr) {
-          console.warn("Direct users table sync warning:", dbErr);
-        }
-
-        await addStaff(submissionPayload);
+        await addStaff({
+          ...submissionPayload,
+          password: finalPassword,
+          Password: finalPassword
+        } as any);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
-        toast.innerHTML = '✅ Staff added successfully.';
+        toast.innerHTML = '✅ Staff onboarded successfully.';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       }
     } catch (err: any) {
+      console.error("Error submitting staff:", err);
       const errMsg = formatStaffErrorMessage(err);
-      setFormError(errMsg);
-      alert(errMsg);
+      const lower = errMsg.toLowerCase();
+      if (lower.includes("already registered") || lower.includes("duplicate")) {
+        const hasMob = lower.includes("mobile") || lower.includes("phone");
+        const hasEm = lower.includes("email");
+        if (hasMob && hasEm) {
+          setMobileError("This mobile number is already registered.");
+          setEmailError("This email address is already registered.");
+          setFormError("This mobile number is already registered. This email address is already registered.");
+        } else if (hasMob) {
+          setMobileError("This mobile number is already registered.");
+          setFormError("This mobile number is already registered.");
+        } else if (hasEm) {
+          setEmailError("This email address is already registered.");
+          setFormError("This email address is already registered.");
+        } else {
+          setFormError(errMsg);
+        }
+      } else {
+        setFormError(errMsg);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -478,7 +467,13 @@ export const OperationsStaffManagement: React.FC = () => {
   };
 
   // Keep list filtered to crew profiles (photographers, videographers, drone operators, assistants) for high specificity
-  const operationsCrew = staff;
+  const operationsCrew = staff.filter(st => {
+    if (!staffSearchQuery.trim()) return true;
+    const q = staffSearchQuery.toLowerCase();
+    const nameMatch = st.name?.toLowerCase().includes(q);
+    const mobileMatch = st.mobile?.toLowerCase().includes(q) || String(st.mobile || '').includes(q);
+    return nameMatch || mobileMatch;
+  });
 
   // Helper to get all active bookings/events for a staff member
   const getStaffActiveBookings = (staffName: string) => {
@@ -666,7 +661,7 @@ export const OperationsStaffManagement: React.FC = () => {
             </div>
 
             <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
-              <form onSubmit={handleSubmit} className="space-y-4 text-xs flex flex-col">
+              <form onSubmit={handleSubmit} noValidate className="space-y-4 text-xs flex flex-col">
                 {formError && (
                   <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl flex items-center gap-2">
                     <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
@@ -700,9 +695,17 @@ export const OperationsStaffManagement: React.FC = () => {
                 readOnly={Boolean(editingId)}
                 placeholder="e.g. +91 9876543210"
                 value={form.mobile}
-                onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
+                onChange={(e) => {
+                  setForm({ ...form, mobile: e.target.value });
+                  if (formError) setFormError('');
+                }}
+                className={`w-full min-w-0 bg-zinc-950 border rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : formError && formError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-zinc-850'}`}
               />
+              {formError && formError.toLowerCase().includes('mobile') && (
+                <p className="text-[11px] text-rose-400 font-sans mt-1">
+                  {formError}
+                </p>
+              )}
             </div>
 
             <div className="min-w-0">
@@ -719,19 +722,26 @@ export const OperationsStaffManagement: React.FC = () => {
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
               />
+              {formError && formError.toLowerCase().includes('email') && (
+                <p className="text-[11px] text-rose-400 font-sans mt-1">
+                  {formError}
+                </p>
+              )}
             </div>
 
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Password {editingId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : '*'}
+                Password {editingId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : <span className="text-zinc-500 font-normal lowercase">(optional, auto-generated if blank)</span>}
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  required={!editingId}
-                  placeholder={editingId ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
+                  placeholder={editingId ? "Leave blank to keep current password" : "Enter password (or auto-generated)"}
                   value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, password: e.target.value });
+                    if (formError) setFormError('');
+                  }}
                   className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 pr-10 text-white focus:outline-none focus:border-amber-500/50"
                 />
                 <button
@@ -834,23 +844,31 @@ export const OperationsStaffManagement: React.FC = () => {
           </fieldset>
 
           {canEdit ? (
-            <div className="flex gap-2 justify-end pt-2 border-t border-zinc-850">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="px-3 py-2 bg-zinc-800 text-zinc-305 text-xs rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
+            <div className="space-y-2 pt-2 border-t border-zinc-850">
+              {formError && (
+                <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-2.5 rounded-xl flex items-center gap-2 text-xs">
+                  <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>{formError}</span>
+                </div>
               )}
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Processing...' : (editingId ? 'Save Changes' : 'Confirm Onboarding')}
-              </button>
+              <div className="flex gap-2 justify-end">
+                {editingId && (
+                  <button
+                    type="button"
+                    onClick={handleCancel}
+                    className="px-3 py-2 bg-zinc-800 text-zinc-305 text-xs rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-[0.98] text-black font-semibold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all"
+                >
+                  {isSaving ? 'Processing...' : (editingId ? 'Save Changes' : 'Confirm Onboarding')}
+                </button>
+              </div>
             </div>
           ) : (
             <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-850 text-[10px] text-zinc-450 font-mono">
@@ -871,19 +889,31 @@ export const OperationsStaffManagement: React.FC = () => {
             <Users className="w-4 h-4 text-amber-500" />
             <span>ACTIVE ROSTER SUMMARY ({operationsCrew.length} registered)</span>
           </h3>
-          {canEdit && (
-            <button 
-              type="button"
-              onClick={() => {
-                handleCancel();
-                setShowStaffModal(true);
-              }}
-              className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold rounded-lg transition-colors shadow-lg shadow-amber-500/20"
-            >
-              <PlusCircle className="w-4 h-4" />
-              + Add Staff
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search staff by name or mobile..."
+                value={staffSearchQuery}
+                onChange={(e) => setStaffSearchQuery(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500/50 w-60"
+              />
+            </div>
+            {canEdit && (
+              <button 
+                type="button"
+                onClick={() => {
+                  handleCancel();
+                  setShowStaffModal(true);
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold rounded-lg transition-colors shadow-lg shadow-amber-500/20"
+              >
+                <PlusCircle className="w-4 h-4" />
+                + Add Staff
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto text-xs flex-1 bg-zinc-950/30 rounded-xl border border-zinc-850">

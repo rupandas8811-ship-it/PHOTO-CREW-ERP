@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown, Layers, ChevronDown
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown, Layers, ChevronDown, AlertCircle
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';

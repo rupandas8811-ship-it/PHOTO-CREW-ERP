@@ -76,24 +76,22 @@ export function ensureModalScrolledToTop(target: HTMLElement | string | null | u
     if (fixedOverlay) {
       if (fixedOverlay.scrollTop !== 0) fixedOverlay.scrollTop = 0;
       resetInternalScrollContainersToTop(fixedOverlay);
+      // Fixed overlays are already fixed to the window viewport.
+      // Do NOT call scrollIntoView on window/body as it causes the page background to jump and black out!
+      return;
     }
 
-    // 2. Find the actual modal card / dialog box element to center in viewport
+    // 2. Only for inline/non-fixed popups, gently center in viewport
     const modalCard = element.querySelector<HTMLElement>(
       '.bg-zinc-950, .bg-zinc-900, .bg-slate-950, .bg-slate-900, [role="dialog"], [role="alertdialog"], .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-lg, .rounded-3xl, .rounded-2xl, .rounded-xl'
     ) || element;
 
-    if (modalCard && typeof modalCard.scrollIntoView === 'function') {
+    const style = window.getComputedStyle(modalCard);
+    if (style.position !== 'fixed' && typeof modalCard.scrollIntoView === 'function') {
       try {
-        modalCard.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        modalCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
       } catch {
-        modalCard.scrollIntoView(true);
-      }
-    } else if (typeof element.scrollIntoView === 'function') {
-      try {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-      } catch {
-        element.scrollIntoView(true);
+        // Ignore scrollIntoView errors
       }
     }
   };
@@ -104,7 +102,6 @@ export function ensureModalScrolledToTop(target: HTMLElement | string | null | u
   }
   setTimeout(performResetAndScroll, 40);
   setTimeout(performResetAndScroll, 120);
-  setTimeout(performResetAndScroll, 300);
 }
 
 /**

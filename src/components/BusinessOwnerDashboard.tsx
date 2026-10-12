@@ -4607,13 +4607,11 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     };
   }, []);
 
-  if (!order || typeof document === 'undefined') return null;
+  const lead = (leads || []).find(l => l && (order && (l.lead_id === order.lead_id || l.lead_id === order.order_id)));
+  const prod = (production || []).find(p => p && (order && (p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id)));
+  const pay = (payments || []).find(p => p && (order && (p.order_id === order.order_id || p.lead_id === order.lead_id || p.order_id === order.lead_id)));
 
-  const lead = (leads || []).find(l => l && (l.lead_id === order.lead_id || l.lead_id === order.order_id));
-  const prod = (production || []).find(p => p && (p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id));
-  const pay = (payments || []).find(p => p && (p.order_id === order.order_id || p.lead_id === order.lead_id || p.order_id === order.lead_id));
-
-  const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
+  const customerMobile = order?.customer_phone || order?.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
   const isBusinessOwner = currentRole === 'Business Owner';
 
   // Extract ALL events separately for this order
@@ -4749,6 +4747,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
       }];
     }
   }, [order, lead, prod, editorAssignments]);
+
+  if (!order || typeof document === 'undefined') return null;
 
   return createPortal(
     <div 

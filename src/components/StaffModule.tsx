@@ -9,7 +9,7 @@ import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } fr
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour } from '../utils';
+import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour, processAndCompressImage } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
@@ -377,102 +377,20 @@ const sortBookingsOldestFirst = (a: any, b: any): number => {
   return String(a.orderId || a.key || '').localeCompare(String(b.orderId || b.key || ''));
 };
 
-// Utility for image compression before storage - converted to robust HEIC-friendly JPEG canvas resizer with transparent PNG fill fallback
+// Utility for image compression before storage - uses processAndCompressImage with solid white fill to prevent blackout
 const compressImage = async (file: File): Promise<string> => {
-  let activeFile: File | Blob = file;
-  
-  const nameLower = file.name?.toLowerCase() || '';
-  const typeLower = file.type?.toLowerCase() || '';
-  
-  if (nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || typeLower.includes('heic') || typeLower.includes('heif')) {
-    try {
-      console.log('[HEIC Conversion] Converting HEIC/HEIF file to JPEG using heic2any...', file.name);
-      const converted = await heic2any({
-        blob: file,
-        toType: 'image/jpeg',
-        quality: 0.8
-      });
-      if (Array.isArray(converted)) {
-        activeFile = converted[0];
-      } else {
-        activeFile = converted;
-      }
-      console.log('[HEIC Conversion] Conversion successful!');
-    } catch (err) {
-      console.warn('[HEIC Conversion] heic2any failed to convert HEIC/HEIF, attempting fallback to raw file', err);
-    }
+  try {
+    const processed = await processAndCompressImage(file);
+    return processed.dataUrl;
+  } catch (err) {
+    console.warn('[compressImage] Processing error fallback:', err);
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve((e.target?.result as string) || '');
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(file);
+    });
   }
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const dataUrl = e.target?.result as string;
-      const img = new Image();
-      
-      const drawToCanvas = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-          
-          if (!width || !height) {
-            resolve(dataUrl);
-            return;
-          }
-
-          const maxDim = 1200;
-          if (width > height && width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-          
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Fill with solid white background to avoid transparent PNGs turning black
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, width, height);
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.8));
-          } else {
-            resolve(dataUrl);
-          }
-        } catch (err) {
-          console.warn('Canvas compression failed, falling back to original image', err);
-          resolve(dataUrl);
-        }
-      };
-
-      img.onload = () => {
-        if (typeof img.decode === 'function') {
-          img.decode()
-            .then(drawToCanvas)
-            .catch((decodeErr) => {
-              console.warn('Image decode failed, drawing anyway', decodeErr);
-              drawToCanvas();
-            });
-        } else {
-          drawToCanvas();
-        }
-      };
-      
-      img.onerror = (err) => {
-        console.warn('Image load failed in compressImage, using original data url', err);
-        resolve(dataUrl);
-      };
-      
-      img.src = dataUrl;
-    };
-    reader.onerror = (err) => {
-      console.warn('FileReader failed, rejecting', err);
-      reject(err);
-    };
-    reader.readAsDataURL(activeFile);
-  });
 };
 
 interface EquipmentProofItem {
@@ -1525,6 +1443,20 @@ export const StaffModule: React.FC = () => {
     if (!base64Url || !base64Url.startsWith('data:image')) {
       return base64Url;
     }
+
+    // Determine correct MIME type from base64 data URI
+    const isPng = base64Url.startsWith('data:image/png');
+    const isWebp = base64Url.startsWith('data:image/webp');
+    const isGif = base64Url.startsWith('data:image/gif');
+    const resolvedMime = isPng ? 'image/png' : isWebp ? 'image/webp' : isGif ? 'image/gif' : 'image/jpeg';
+
+    // Ensure extension matches MIME type
+    let finalFileName = fileName;
+    if (isPng && !finalFileName.toLowerCase().endsWith('.png')) {
+      finalFileName = finalFileName.replace(/\.[a-z0-9]+$/i, '') + '.png';
+    } else if (isWebp && !finalFileName.toLowerCase().endsWith('.webp')) {
+      finalFileName = finalFileName.replace(/\.[a-z0-9]+$/i, '') + '.webp';
+    }
     
     try {
       // 1. Try server API first (useful for bypassing CORS/RLS if configured)
@@ -1532,7 +1464,7 @@ export const StaffModule: React.FC = () => {
         const uploadRes = await fetch('/api/upload-proof', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64: base64Url, fileName, contentType: 'image/jpeg' })
+          body: JSON.stringify({ base64: base64Url, fileName: finalFileName, contentType: resolvedMime, bucketName: 'img' })
         });
         
         if (uploadRes.ok) {
@@ -1572,15 +1504,15 @@ export const StaffModule: React.FC = () => {
         byteArrays.push(byteArray);
       }
       
-      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+      const blob = new Blob(byteArrays, { type: resolvedMime });
 
-      // Upload directly to Supabase storage
+      // Upload directly to Supabase storage bucket 'img'
       if (!supabaseClient) throw new Error("Supabase client is not initialized.");
       
       const { data, error } = await supabaseClient.storage
         .from('img')
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
+        .upload(finalFileName, blob, {
+          contentType: resolvedMime,
           upsert: true
         });
 
@@ -1591,7 +1523,7 @@ export const StaffModule: React.FC = () => {
       // Get public URL
       const { data: publicData } = supabaseClient.storage
         .from('img')
-        .getPublicUrl(fileName);
+        .getPublicUrl(data?.path || finalFileName);
 
       if (!publicData || !publicData.publicUrl) {
         throw new Error("Failed to generate public URL for uploaded proof.");
@@ -3997,21 +3929,35 @@ export const StaffModule: React.FC = () => {
                           <span className="text-xs font-bold text-amber-300">Uploading and saving {item.displayName || item.name}...</span>
                           <span className="text-[10px] text-zinc-400">Saving to storage immediately</span>
                         </div>
-                      ) : currentPhoto ? (
-                        <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
-                          <img src={currentPhoto} alt={item.name} className="w-full h-40 object-cover" />
-                          <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
-                            <Upload className="w-3.5 h-3.5" /> Change Photo
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
-                              className="hidden"
+                      ) : currentPhoto ? (() => {
+                        const resolvedPhotoUrl = resolveStorageUrl(currentPhoto) || currentPhoto;
+                        return (
+                          <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 min-h-[160px] flex items-center justify-center">
+                            <img 
+                              src={resolvedPhotoUrl} 
+                              alt={item.name} 
+                              className="w-full h-44 object-contain bg-zinc-950" 
+                              loading="lazy"
+                              onError={(e) => {
+                                console.warn('[StaffModule] Image preview error for:', resolvedPhotoUrl);
+                              }}
                             />
-                          </label>
-                        </div>
-                      ) : (
+                            <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1 border border-emerald-500/30">
+                              <CheckCircle className="w-3 h-3" /> Ready
+                            </div>
+                            <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
+                              <Upload className="w-3.5 h-3.5" /> Change Photo
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                        );
+                      })() : (
                         <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
                           <div className="w-10 h-10 rounded-full bg-zinc-800 group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-400 flex items-center justify-center transition-colors">
                             <Camera className="w-5 h-5" />

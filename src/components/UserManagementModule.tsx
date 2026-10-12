@@ -4,7 +4,7 @@ import {
   Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon, Eye, EyeOff
 } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { formatDateDDMMYY } from '../utils';
+import { formatDateDDMMYY, formatStaffErrorMessage } from '../utils';
 import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
 
 export const UserManagementModule: React.FC = () => {
@@ -136,6 +136,7 @@ export const UserManagementModule: React.FC = () => {
   const [newActive, setNewActive] = useState(true);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [addFormError, setAddFormError] = useState('');
 
   // Edit User Form State
   const [editName, setEditName] = useState('');
@@ -161,9 +162,10 @@ export const UserManagementModule: React.FC = () => {
 
     try {
       setIsSaving(true);
+      setAddFormError('');
       await addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
       
-      // Clear state
+      // Clear state only on success
       setNewName('');
       setNewEmail('');
       setNewMobile('');
@@ -174,7 +176,9 @@ export const UserManagementModule: React.FC = () => {
       
       alert('Staff account registered successfully in system directory!');
     } catch (err: any) {
-      alert(`Registration failed: ${err?.message || err}`);
+      const errMsg = formatStaffErrorMessage(err);
+      setAddFormError(errMsg);
+      alert(errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -899,6 +903,11 @@ export const UserManagementModule: React.FC = () => {
             <div className="p-5 space-y-4 text-xs font-sans text-left">
               {showAddForm && (
                 <form onSubmit={handleAddSubmit} className="space-y-4 text-xs">
+                  {addFormError && (
+                    <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs flex items-center gap-2">
+                      <span>{addFormError}</span>
+                    </div>
+                  )}
                   <div>
                     <label className="block font-semibold text-slate-400 mb-1">Full Name *</label>
                     <input
@@ -906,7 +915,7 @@ export const UserManagementModule: React.FC = () => {
                       required
                       placeholder="e.g., Jack Richards"
                       value={newName}
-                      onChange={(e) => setNewName(e.target.value)}
+                      onChange={(e) => { setNewName(e.target.value); if (addFormError) setAddFormError(''); }}
                       className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505"
                     />
                   </div>
@@ -918,7 +927,7 @@ export const UserManagementModule: React.FC = () => {
                       required
                       placeholder="jack.r@photocrew.com"
                       value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
+                      onChange={(e) => { setNewEmail(e.target.value); if (addFormError) setAddFormError(''); }}
                       className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505 font-mono"
                     />
                   </div>
@@ -930,9 +939,14 @@ export const UserManagementModule: React.FC = () => {
                       required
                       placeholder="+1 (555) 012-3456"
                       value={newMobile}
-                      onChange={(e) => setNewMobile(e.target.value)}
-                      className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505 font-mono"
+                      onChange={(e) => { setNewMobile(e.target.value); if (addFormError) setAddFormError(''); }}
+                      className={`w-full bg-slate-955 border rounded-lg py-2 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505 font-mono ${addFormError && addFormError.toLowerCase().includes('mobile') ? 'border-rose-500/70' : 'border-slate-800'}`}
                     />
+                    {addFormError && addFormError.toLowerCase().includes('mobile') && (
+                      <p className="text-xs text-rose-400 mt-1">
+                        {addFormError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
