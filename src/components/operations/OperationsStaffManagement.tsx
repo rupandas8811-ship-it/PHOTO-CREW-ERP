@@ -939,10 +939,7 @@ export const OperationsStaffManagement: React.FC = () => {
                     <tr key={st.staff_id} className="hover:bg-zinc-900/10 transition-all">
                       <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">{idx + 1}</td>
                       <td className="p-3.5">
-                        <div className="font-mono text-zinc-405 bg-zinc-950 px-1.5 py-0.5 rounded text-[10px] w-fit border border-zinc-850">
-                          {st.staff_id}
-                        </div>
-                        <div className="font-bold text-zinc-100 mt-1">{st.name}</div>
+                        <div className="font-bold text-zinc-100">{st.name}</div>
                       </td>
                       <td className="p-3.5 space-y-1 text-[11px] text-zinc-400">
                         <div className="flex items-center gap-1.5">
