@@ -5,7 +5,7 @@ import {
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from '../RoleContext';
 import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage, deserializeLeadEvents, bringErrorElementIntoView } from '../../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage, deserializeLeadEvents } from '../../utils';
 import { jsPDF } from 'jspdf';
 import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, verifyAndFormatLeadPackagePayload, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, fetchAndResolveLatestPaymentData, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, checkIsEventEnded, checkIsLeadCrmLocked, getStep3FinalQuotationAmount, getSyncSavedQuotationAmount, resolveSavedQuotationAmount } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
@@ -552,8 +552,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const showValidationError = (fieldId: string, msg: string) => {
     const el = document.getElementById(fieldId);
     if (el) {
-      bringErrorElementIntoView(el, true);
-      el.focus({ preventScroll: true });
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.focus();
       el.classList.add('!border-red-500', 'ring-1', '!ring-red-500');
       let msgEl = el.nextElementSibling as HTMLElement;
       if (!msgEl || !msgEl.classList.contains('validation-error-msg')) {
@@ -3280,13 +3280,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (leadObj.events && leadObj.events.length > 0) {
         eventDetailsStr = leadObj.events.map((ev) => {
           const eName = ev.event_name || ev.event_type || 'Event';
-          const eDate = ev.event_date || 'N/A';
+          const eDate = ev.event_date ? (formatDateDDMMYY(ev.event_date) || ev.event_date) : 'N/A';
           const eTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
           return `🎉 ${eName}\n📅 Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
         }).join('\n\n') + '\n';
       } else {
         const safeEventType = String(leadObj.event_type || 'Event');
-        const safeEventDate = String(leadObj.event_date || 'N/A');
+        const safeEventDate = leadObj.event_date ? (formatDateDDMMYY(leadObj.event_date) || leadObj.event_date) : 'N/A';
         eventDetailsStr = `🎉 Event: ${safeEventType}\n📅 Event Date: ${safeEventDate}\n`;
       }
 

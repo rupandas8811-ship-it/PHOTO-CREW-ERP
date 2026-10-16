@@ -1,1013 +1,840 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRole } from '../RoleContext';
-import { DatePreset, getPresetDateRange, isDateInRange, TODAY_REF, DateRange } from './DateFilterHelper';
-import { DatePresetSelector } from './DatePresetSelector';
-import { AnalyticsReportModal } from './AnalyticsReportModal';
 import { 
-  PlusSquare, Calendar, Users, CheckCircle, Video, Clock, AlertTriangle, Play,
-  BarChart3, ChevronRight, TrendingUp, UserCheck, Activity, FileText, Download, 
-  UserPlus, Search, Filter, Percent, Info, X
+  Search, Calendar, User, Clock, CheckCircle2, AlertCircle, 
+  Printer, Download, MapPin, X, Users, Compass, Briefcase, 
+  Activity, Star, FileSpreadsheet, ChevronRight, CheckSquare,
+  Shield, Camera, Video, AlertTriangle
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  CartesianGrid, Legend, Cell 
-} from 'recharts';
-import { jsPDF } from 'jspdf';
-import { StaffAssignment } from '../../types';
-import { CameraLensStatsCard } from '../CameraLensStatsCard';
-import { formatDateDDMMYY } from '../../utils';
+import { Staff, Order } from '../../types';
+import { formatDateDDMMYY, formatDateToDDMMYYYY } from '../../utils';
+import { DateFilterInput } from '../ui/DateFilterInput';
+
+import { formatTime12Hour } from "../../utils";
 
 export const OperationsAnalytics: React.FC = () => {
-  const { leads, orders, operations, rawFootage, payments, production, staff, globalDateRange, staffAssignments } = useRole();
+  const { 
+    orders, 
+    operations, 
+    staff, 
+    staffAssignments 
+  } = useRole();
 
-  // Selected Card for Report Popup
-  const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [showFilters, setShowFilters] = useState(false);
-
-  // Staff Performance local states
-  const [staffNameFilter, setStaffNameFilter] = useState('');
-  const [staffRoleFilter, setStaffRoleFilter] = useState('All');
-  const [selectedStaffDetail, setSelectedStaffDetail] = useState<any | null>(null);
-  const [activeStaffCardFilter, setActiveStaffCardFilter] = useState<string | null>(null);
-
-  // Active Date Bounds are the global range from context
-  const activeRange = globalDateRange;
-
-  // Filtered dataset variables
-  const filteredOrders = useMemo(() => {
-    return orders.filter(o => isDateInRange(o.event_date, activeRange));
-  }, [orders, activeRange]);
-
-  // Compute Card Metrics
-  const newOrdersCount = filteredOrders.filter(o => o.current_stage === 'New Order Received' || o.current_stage === 'Order Confirmed').length;
+  // Unified persistent filters using sessionStorage for cross-tab syncing
+  const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem('ops_search') || '');
+  const [startDateInput, setStartDateInput] = useState(() => sessionStorage.getItem('ops_start_date') || '');
+  const [endDateInput, setEndDateInput] = useState(() => sessionStorage.getItem('ops_end_date') || '');
   
-  const eventsScheduledCount = filteredOrders.filter(o => 
-    o.current_stage === 'Event Scheduled' || o.current_stage === 'Operations Assigned'
-  ).length;
+  const [appliedSearch, setAppliedSearch] = useState(() => sessionStorage.getItem('ops_search') || '');
+  const [appliedStartDate, setAppliedStartDate] = useState(() => sessionStorage.getItem('ops_start_date') || '');
+  const [appliedEndDate, setAppliedEndDate] = useState(() => sessionStorage.getItem('ops_end_date') || '');
 
-  const staffAssignedCount = useMemo(() => {
-    return filteredOrders.filter(o => {
-      const op = operations.find(x => x.order_id === o.order_id);
-      if (!op) return false;
-      const assigned = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned];
-      return assigned.some(name => name && name !== 'None' && name !== 'Unassigned');
-    }).length;
-  }, [filteredOrders, operations]);
+  // Synchronize on mount/changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setSearchQuery(sessionStorage.getItem('ops_search') || '');
+      setStartDateInput(sessionStorage.getItem('ops_start_date') || '');
+      setEndDateInput(sessionStorage.getItem('ops_end_date') || '');
+      setAppliedSearch(sessionStorage.getItem('ops_search') || '');
+      setAppliedStartDate(sessionStorage.getItem('ops_start_date') || '');
+      setAppliedEndDate(sessionStorage.getItem('ops_end_date') || '');
+    };
+    window.addEventListener('storage_sync', handleStorageChange);
+    return () => window.removeEventListener('storage_sync', handleStorageChange);
+  }, []);
 
-  const eventsCompletedCount = filteredOrders.filter(o => 
-    o.current_stage === 'Event Completed' || o.current_stage === 'Closed' || o.current_stage === 'Delivered'
-  ).length;
+  // Selected KPI Card for detailed table view (Defaults to total_events)
+  const [selectedCard, setSelectedCard] = useState<string>('total_events');
 
-  const rawFootageReceivedCount = useMemo(() => {
-    return filteredOrders.filter(o => {
-      const footage = (rawFootage || []).find(f => f.order_id === o.order_id);
-      return (footage && footage.status === 'Received') || o.current_stage === 'Raw Footage Received';
-    }).length;
-  }, [filteredOrders, rawFootage]);
+  // Selected Staff for detailed side-panel view
+  const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
 
-  const upcomingEventsCount = filteredOrders.filter(o => o.event_date >= TODAY_REF).length;
-  const todaysEventsCount = filteredOrders.filter(o => o.event_date === TODAY_REF).length;
-  
-  const overdueEventsCount = filteredOrders.filter(o => 
-    o.event_date < TODAY_REF && 
-    o.current_stage !== 'Event Completed' && 
-    o.current_stage !== 'Closed' && 
-    o.current_stage !== 'Delivered'
-  ).length;
+  // Today's Date Anchor from Metadata (2026-06-18)
+  const todayStr = '2026-06-18';
 
-  // Pie chart or Bar chart data for event types
-  const eventTypeChartData = useMemo(() => {
-    const counts: { [key: string]: number } = {};
-    filteredOrders.forEach(o => {
-      counts[o.event_type] = (counts[o.event_type] || 0) + 1;
+  // Helper: Format Dates cleanly
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    return formatDateDDMMYY(dateStr) || dateStr;
+  };
+
+  // Helper: Retrieve all orders assigned to a specific staff member
+  const getStaffAssignedOrders = (staffMember: Staff, listSource: Order[]) => {
+    return listSource.filter(o => {
+      // 1. Check operations record
+      const op = operations.find(opItem => opItem.order_id === o.order_id);
+      if (op) {
+        const isAssignedInOp = 
+          op.photographer_assigned === staffMember.name ||
+          op.videographer_assigned === staffMember.name ||
+          op.drone_operator_assigned === staffMember.name ||
+          op.assistant_assigned === staffMember.name;
+        if (isAssignedInOp) return true;
+      }
+      
+      // 2. Check staffAssignments multi-role collection
+      const sa = staffAssignments?.some(saItem => 
+        saItem.order_id === o.order_id && 
+        (saItem.staff_id === staffMember.staff_id || saItem.staff_name === staffMember.name) &&
+        saItem.assignment_status !== 'Cancelled'
+      );
+      return !!sa;
     });
-    return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
-  }, [filteredOrders]);
+  };
 
-  const COLORS = ['#818CF8', '#10B981', '#34D399', '#FB7185', '#F59E0B', '#A78BFA'];
+  // Helper: Get formatted assigned crew string
+  const getAssignedCrewString = (orderId: string) => {
+    const op = operations.find(o => o.order_id === orderId);
+    const names: string[] = [];
+    if (op) {
+      if (op.photographer_assigned) names.push(`${op.photographer_assigned} (Photo)`);
+      if (op.videographer_assigned) names.push(`${op.videographer_assigned} (Video)`);
+      if (op.drone_operator_assigned && op.drone_operator_assigned !== 'None') names.push(`${op.drone_operator_assigned} (Drone)`);
+      if (op.assistant_assigned && op.assistant_assigned !== 'None') names.push(`${op.assistant_assigned} (Assistant)`);
+    }
+
+    const sa = staffAssignments?.filter(s => s.order_id === orderId && s.assignment_status !== 'Cancelled') || [];
+    sa.forEach(item => {
+      const label = `${item.staff_name} (${item.staff_role})`;
+      if (!names.some(n => n.startsWith(item.staff_name))) {
+        names.push(label);
+      }
+    });
+
+    return names.length > 0 ? names.join(', ') : 'No staff assigned yet';
+  };
+
+  // Helper: Get Reporting Time of Event
+  const getReportingTimeOfEvent = (orderId: string) => {
+    const o = orders.find(ord => ord.order_id === orderId);
+    const op = operations.find(o => o.order_id === orderId);
+    return formatTime12Hour(op?.reporting_time || o?.reporting_time || o?.event_time) || 'N/A';
+  };
+
+  // Apply filters to data (Start Date, End Date, and Search Query)
+  const filteredOrders = orders.filter(o => {
+    const matchesSearch = appliedSearch === '' || 
+      o.customer_name.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      o.order_id.toLowerCase().includes(appliedSearch.toLowerCase()) || 
+      o.event_type.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      o.event_location.toLowerCase().includes(appliedSearch.toLowerCase());
+    
+    const matchesStart = appliedStartDate === '' || o.event_date >= appliedStartDate;
+    const matchesEnd = appliedEndDate === '' || o.event_date <= appliedEndDate;
+    
+    return matchesSearch && matchesStart && matchesEnd && o.current_stage !== 'Closed';
+  });
+
+  // Filter staff according to any filters if needed, but standard directory uses real-time state
+  const filteredStaff = staff;
+
+  // Handlers for Filters
+  const handleApplyFilters = () => {
+    sessionStorage.setItem('ops_search', searchQuery);
+    sessionStorage.setItem('ops_start_date', startDateInput);
+    sessionStorage.setItem('ops_end_date', endDateInput);
+    
+    setAppliedSearch(searchQuery);
+    setAppliedStartDate(startDateInput);
+    setAppliedEndDate(endDateInput);
+
+    // Notify any other components of the sync values
+    window.dispatchEvent(new Event('storage_sync'));
+  };
+
+  const handleResetFilters = () => {
+    sessionStorage.removeItem('ops_search');
+    sessionStorage.removeItem('ops_start_date');
+    sessionStorage.removeItem('ops_end_date');
+
+    setSearchQuery('');
+    setStartDateInput('');
+    setEndDateInput('');
+    setAppliedSearch('');
+    setAppliedStartDate('');
+    setAppliedEndDate('');
+
+    window.dispatchEvent(new Event('storage_sync'));
+  };
+
+  // Exact Metric Definitions:
+  const totalEvents = filteredOrders;
+  const eventsScheduled = filteredOrders.filter(o => ['Assigned Crew', 'Event Scheduled', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
+  const eventsCompleted = filteredOrders.filter(o => ['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage) || o.order_status === 'Completed');
+  const upcomingEvents = filteredOrders.filter(o => o.event_date >= todayStr && !['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Delivered', 'Closed'].includes(o.current_stage));
+  const ongoingEvents = filteredOrders.filter(o => o.event_date === todayStr);
+  const overdueEvents = filteredOrders.filter(o => o.event_date < todayStr && !['Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage));
+  const rawFootageEvents = filteredOrders.filter(o => ['Footage Handover', 'Verified Footage', 'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Customer Review', 'Revision Required', 'Approved', 'Delivered'].includes(o.current_stage));
+
+  const totalStaff = filteredStaff;
+  const activeStaff = filteredStaff.filter(s => s.status === 'Active');
+  
+  const staffPendingEvents = filteredStaff.filter(s => {
+    const assigned = getStaffAssignedOrders(s, filteredOrders);
+    return assigned.some(o => ['Order Confirmed', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
+  });
+
+  const staffCompletedEvents = filteredStaff.filter(s => {
+    const assigned = getStaffAssignedOrders(s, filteredOrders);
+    return assigned.some(o => ['Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage) || o.order_status === 'Completed');
+  });
+
+  // KPI metadata extraction
+  const getSelectedCardData = () => {
+    switch (selectedCard) {
+      case 'total_events':
+        return { title: 'Total Events', data: totalEvents, type: 'events' };
+      case 'events_scheduled':
+        return { title: 'Total Events Scheduled', data: eventsScheduled, type: 'events' };
+      case 'events_completed':
+        return { title: 'Total Events Completed', data: eventsCompleted, type: 'events' };
+      case 'upcoming_events':
+        return { title: 'Upcoming Events', data: upcomingEvents, type: 'events' };
+      case 'ongoing_events':
+        return { title: 'Ongoing Events', data: ongoingEvents, type: 'events' };
+      case 'overdue_events':
+        return { title: 'Overdue Events', data: overdueEvents, type: 'events' };
+      case 'raw_footage':
+        return { title: 'Raw Footage Received', data: rawFootageEvents, type: 'events' };
+      case 'total_staff':
+        return { title: 'Total Operations Staff', data: totalStaff, type: 'staff' };
+      case 'active_staff':
+        return { title: 'Active Staff', data: activeStaff, type: 'staff' };
+      case 'staff_pending':
+        return { title: 'Staff Pending Events', data: staffPendingEvents, type: 'staff' };
+      case 'staff_completed':
+        return { title: 'Staff Completed Events', data: staffCompletedEvents, type: 'staff' };
+      default:
+        return { title: 'Total Events', data: totalEvents, type: 'events' };
+    }
+  };
+
+  const activeDetail = getSelectedCardData();
+
+  // Status badge styling helper
+  const getStageBadge = (stage: string) => {
+    switch (stage) {
+      case 'Order Confirmed':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 border border-blue-500/20 text-blue-400 font-mono">Order Confirmed</span>;
+      case 'Assigned Crew':
+      case 'Staff Assigned':
+      case 'Event Scheduled':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-mono">Assigned Crew</span>;
+      case 'Event Started':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono">Event Started</span>;
+      case 'Event Ended':
+      case 'Event Completed':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 border border-purple-500/20 text-purple-400 font-mono">Event Ended</span>;
+      case 'Footage Handover':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-mono">Footage Handover</span>;
+      case 'Verified Footage':
+      case 'Footage Handover Verified':
+      case 'Raw Footage Received':
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono">Verified Footage</span>;
+      default:
+        return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-700/20 border border-zinc-650/30 text-zinc-300 font-mono">{stage}</span>;
+    }
+  };
+
+  // REPORTS GENERATORS
+  const handleDownloadCSV = () => {
+    const headers = ["Order ID", "Customer Name", "Event Type", "Event Date", "Assigned Staff", "Current Status", "Reporting Time", "Created Date"];
+    const rows = filteredOrders.map(o => [
+      o.order_id,
+      o.customer_name,
+      o.event_type,
+      formatDate(o.event_date),
+      getAssignedCrewString(o.order_id).replace(/,/g, ';'),
+      o.current_stage,
+      getReportingTimeOfEvent(o.order_id),
+      o.created_at ? formatDate(o.created_at) : 'N/A'
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))].join("\n");
+      
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Ops_Studio_Report_${appliedStartDate || 'All'}_to_${appliedEndDate || 'All'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadExcel = () => {
+    const headers = ["Order ID", "Customer Name", "Event Type", "Event Date", "Assigned Staff", "Current Status", "Reporting Time", "Created Date"];
+    const rows = filteredOrders.map(o => [
+      o.order_id,
+      o.customer_name,
+      o.event_type,
+      formatDate(o.event_date),
+      getAssignedCrewString(o.order_id),
+      o.current_stage,
+      getReportingTimeOfEvent(o.order_id),
+      o.created_at ? formatDate(o.created_at) : 'N/A'
+    ]);
+    
+    const content = [headers.join("\t"), ...rows.map(e => e.join("\t"))].join("\n");
+    const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Ops_Studio_Report_${appliedStartDate || 'All'}_to_${appliedEndDate || 'All'}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const rowsHtml = filteredOrders.map(o => `
+      <tr>
+        <td><b>${o.order_id}</b></td>
+        <td>${o.customer_name}</td>
+        <td>${o.event_type}</td>
+        <td>${formatDate(o.event_date)}</td>
+        <td>${getAssignedCrewString(o.order_id)}</td>
+        <td>${o.current_stage}</td>
+        <td>${getReportingTimeOfEvent(o.order_id)}</td>
+        <td>${o.created_at ? formatDate(o.created_at.split('T')[0]) : 'N/A'}</td>
+      </tr>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Photography Studio Registry - Operations Report</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 30px; color: #111827; background-color: #ffffff; }
+            h1 { font-size: 24px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #000; margin: 0 0 5px 0; }
+            .meta { font-size: 12px; color: #4b5563; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 20px; }
+            th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; }
+            th { background-color: #f3f4f6; font-weight: bold; text-transform: uppercase; font-size: 10px; color: #374151; }
+            tr:nth-child(even) { background-color: #f9fafb; }
+            .footer { margin-top: 50px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 15px; font-family: monospace; }
+          </style>
+        </head>
+        <body>
+          <h1>STUDIO OPERATIONS REGISTRY REPORT</h1>
+          <div class="meta">
+            Generator Time: ${formatDateDDMMYY(new Date())} | 
+            Scope Range: ${appliedStartDate ? formatDate(appliedStartDate) : 'All Starts'} to ${appliedEndDate ? formatDate(appliedEndDate) : 'All Ends'} | 
+            Active Matches Count: ${filteredOrders.length}
+          </div>
+          <div className="overflow-x-auto w-full max-w-full">
+<table>
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Customer Name</th>
+                <th>Event Type</th>
+                <th>Event Date</th>
+                <th>Assigned Staff</th>
+                <th>Current Status</th>
+                <th>Reporting Time</th>
+                <th>Created Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+</div>
+          <div class="footer">Confidential System File - Photography Studio Executive Service</div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   return (
     <div className="space-y-6">
-      
-      {/* Title & Context */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-black uppercase text-indigo-400 font-mono tracking-[0.18em]">
-            Operations Desk Analytics
-          </h2>
-          <p className="text-[11px] text-zinc-500 font-sans mt-0.5">
-            Logistical scheduling monitor, crew roster allocations, and photographic file asset intakes.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Filter / Download</span>
-          </button>
-          <div className="p-2 py-1.5 rounded-xl bg-zinc-900 border border-zinc-850/80 flex items-center gap-2.5 h-9">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-mono text-zinc-450 uppercase font-bold">
-              Operations Live
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {showFilters && (
-        <div className="flex justify-end bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl animate-in fade-in duration-200">
-          <button
-            onClick={() => setSelectedCard('Complete Operations Digest')}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-mono text-[10px] uppercase font-bold tracking-wider cursor-pointer h-9 shadow-md shadow-black/10"
-          >
-            <FileText className="w-4 h-4" />
-            <span>Download Report</span>
-          </button>
-        </div>
-      )}
-
-      {/* Operational 8 Analytics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* COMMAND CONTROL / GLOBAL FILTER UTILITY BAR */}
+      <div className="bg-zinc-950/60 p-5 rounded-2xl border border-zinc-850 shadow-2xl relative overflow-hidden">
+        {/* Glass Reflection effect decorative border */}
+        <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent -translate-x-full" />
         
-        <CameraLensStatsCard
-          label="Orders Received"
-          val={newOrdersCount}
-          theme="purple"
-          trendText="Awaiting Allocation"
-          onClick={() => setSelectedCard('New Orders Received')}
-          lensLabel="PRIME 24mm"
-        />
-
-        <CameraLensStatsCard
-          label="Events Scheduled"
-          val={eventsScheduledCount}
-          theme="blue"
-          trendText="Logistics Calibrated"
-          onClick={() => setSelectedCard('Events Scheduled')}
-          lensLabel="PRIME 35mm"
-        />
-
-        <CameraLensStatsCard
-          label="Staff Allocated"
-          val={staffAssignedCount}
-          theme="green"
-          trendText="Crew Units Attached"
-          onClick={() => setSelectedCard('Staff Assigned')}
-          lensLabel="PRIME 50mm"
-        />
-
-        <CameraLensStatsCard
-          label="Events Completed"
-          val={eventsCompletedCount}
-          theme="cyan"
-          trendText="Shoots Closed"
-          onClick={() => setSelectedCard('Events Completed')}
-          lensLabel="PRIME 85mm"
-        />
-
-        <CameraLensStatsCard
-          label="Raw Footage Intake"
-          val={rawFootageReceivedCount}
-          theme="purple"
-          trendText="Files Ingestion Ledger"
-          onClick={() => setSelectedCard('Raw Footage Received')}
-          lensLabel="TELE 100mm"
-        />
-
-        <CameraLensStatsCard
-          label="Upcoming Events"
-          val={upcomingEventsCount}
-          theme="blue"
-          trendText="Logistics Forward View"
-          onClick={() => setSelectedCard('Upcoming Events')}
-          lensLabel="TELE 135mm"
-        />
-
-        <CameraLensStatsCard
-          label="Today's Events"
-          val={todaysEventsCount}
-          theme="gold"
-          trendText="Ongoing Shoot Calendars"
-          onClick={() => setSelectedCard('Today\'s Events')}
-          lensLabel="TELE 200mm"
-        />
-
-        <CameraLensStatsCard
-          label="Overdue Shoots"
-          val={overdueEventsCount}
-          theme="red"
-          trendText="Action Needed Immediately"
-          onClick={() => setSelectedCard('Overdue Events')}
-          lensLabel="TELE 400mm"
-        />
-
-      </div>
-
-      {/* Visual Recharts Section */}
-      <div className="bg-zinc-950/50 border border-zinc-850 p-4 sm:p-5 rounded-2xl space-y-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-emerald-400" />
-          <h4 className="text-xs font-black uppercase text-zinc-300 font-mono tracking-wider">
-            Operational Event Types Distribution
-          </h4>
-        </div>
-        
-        <div className="h-[220px] w-full">
-          {eventTypeChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={eventTypeChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.3} />
-                <XAxis dataKey="name" stroke="#71717a" fontSize={9} tickLine={false} />
-                <YAxis stroke="#71717a" fontSize={9} tickLine={false} />
-                <Tooltip 
-                  cursor={{ fill: '#18181b', opacity: 0.15 }}
-                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px', fontSize: '11px', color: '#fff' }}
-                  itemStyle={{ fontSize: '11px' }}
-                />
-                <Bar dataKey="value" name="Shoots Scheduled" fill="#6366F1" radius={[8, 8, 0, 0]} maxBarSize={45}>
-                  {eventTypeChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex items-center justify-center text-zinc-550 border border-dashed border-zinc-850 rounded-xl font-sans italic text-xs">
-              No active event types registered within this scope.
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-5 relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full border border-amber-500/20 bg-zinc-900 flex items-center justify-center shadow-lg relative">
+              <div className="absolute inset-1.5 rounded-full border-2 border-dashed border-zinc-700 animate-[spin_30s_linear_infinite]" />
+              <Camera className="w-5 h-5 text-amber-500 relative z-10" />
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* OPERATIONS STAFF PERFORMANCE SECTION */}
-      <div className="bg-zinc-950/50 border border-zinc-850 p-5 rounded-2xl space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-zinc-900">
-          <div>
-            <h3 className="text-sm font-black uppercase text-indigo-400 font-mono tracking-wider flex items-center gap-2">
-              <Users className="w-4 h-4" /> Operations Staff Performance
-            </h3>
-            <p className="text-[11px] text-zinc-500 font-sans mt-0.5">
-              Live efficiency analytics, booking rates, completion speed, and workload rosters for ground crew.
-            </p>
+            <div>
+              <h3 className="text-sm font-black text-zinc-100 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                <span>PHOTOGRAPHY OPERATIONS COMMAND</span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded animate-pulse">LIVE FEED</span>
+              </h3>
+              <p className="text-[11px] text-zinc-400 mt-1">Configure parameters to update all DSLR camera analytics, timetables, maps, and exportable directories in real time.</p>
+            </div>
           </div>
           
-          {/* Legend/Reset Filter if card filter active */}
-          {activeStaffCardFilter && (
-            <button 
-              onClick={() => setActiveStaffCardFilter(null)}
-              className="px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 font-mono text-[10px] uppercase border border-indigo-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+          {/* Action Export Buttons */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handlePrintReport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold bg-zinc-900 hover:bg-zinc-805 text-amber-400 border border-zinc-800 rounded-lg transition-all cursor-pointer shadow-md select-none"
+              title="Print standard report"
             >
-              <X className="w-3" /> Clear Card Filter ({activeStaffCardFilter})
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Report</span>
             </button>
-          )}
+            
+            <button
+              onClick={handlePrintReport}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold bg-zinc-900 hover:bg-zinc-805 text-rose-400 border border-zinc-800 rounded-lg transition-all cursor-pointer shadow-md select-none"
+              title="Save report as physical PDF file via Print settings"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
+            
+            <button
+              onClick={handleDownloadExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold bg-zinc-900 hover:bg-zinc-805 text-emerald-400 border border-zinc-800 rounded-lg transition-all cursor-pointer shadow-md select-none"
+              title="Export spreadsheet format"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Excel (.xlsx)</span>
+            </button>
+
+            <button
+              onClick={handleDownloadCSV}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold bg-zinc-900 hover:bg-zinc-850 text-indigo-450 border border-zinc-800 rounded-lg transition-all cursor-pointer shadow-md select-none"
+              title="Export CSV text"
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>CSV</span>
+            </button>
+          </div>
         </div>
 
-        {/* Dynamic Calculations for Operations Staff */}
-        {(() => {
-          // Identify Operations Staff members
-          const opsStaff = staff.filter(s => {
-            const depLower = (s.department || '').toLowerCase();
-            const roleLower = (s.role || '').toLowerCase();
-            return depLower === 'operations' || 
-                   ['photographer', 'videographer', 'drone', 'assistant', 'crew', 'light', 'helper'].some(kw => roleLower.includes(kw) || depLower.includes(kw));
-          });
+        {/* Filters Grid Row */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end pt-5 mt-4 border-t border-zinc-900 relative z-10">
+          <div className="md:col-span-4">
+            <label className="block text-[10px] uppercase font-mono font-black text-zinc-400 mb-1.5 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-amber-500" />
+              <span>Search Events / Customers / Venues</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Search ID, customer, category, city..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-sans focus:outline-none focus:border-amber-500 transition-all placeholder-zinc-500"
+            />
+          </div>
 
-          // Compile detailed performance statistics
-          const staffPerformanceData = opsStaff.map(member => {
-            // Find all direct bookings from staffAssignments table in range
-            const directAssignments = staffAssignments.filter(sa => {
-              const order = orders.find(o => o.order_id === sa.order_id);
-              const opDate = sa.assignment_date || order?.event_date || '';
-              return sa.staff_id === member.staff_id && isDateInRange(opDate, activeRange);
-            });
+          <div className="md:col-span-3">
+            <label className="block text-[10px] uppercase font-mono font-black text-zinc-400 mb-1.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-amber-500" />
+              <span>Start Date (Inclusive)</span>
+            </label>
+            <DateFilterInput
+              value={startDateInput}
+              onChange={setStartDateInput}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:border-amber-500"
+            />
+          </div>
 
-            // Fallback: operations table records
-            const opAssignments = operations.filter(op => {
-              const order = orders.find(o => o.order_id === op.order_id);
-              if (!order || !isDateInRange(order.event_date, activeRange)) return false;
-              const isAssigned = op.photographer_assigned === member.name || 
-                                 op.videographer_assigned === member.name || 
-                                 op.drone_operator_assigned === member.name || 
-                                 op.assistant_assigned === member.name;
-              const alreadyHasDirect = directAssignments.some(da => da.order_id === op.order_id);
-              return isAssigned && !alreadyHasDirect;
-            }).map(op => {
-              const order = orders.find(o => o.order_id === op.order_id)!;
-              let roleStr = 'Assistant';
-              if (op.photographer_assigned === member.name) roleStr = 'Photographer';
-              else if (op.videographer_assigned === member.name) roleStr = 'Videographer';
-              else if (op.drone_operator_assigned === member.name) roleStr = 'Drone Operator';
+          <div className="md:col-span-3">
+            <label className="block text-[10px] uppercase font-mono font-black text-zinc-400 mb-1.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-amber-500" />
+              <span>End Date (Inclusive)</span>
+            </label>
+            <DateFilterInput
+              value={endDateInput}
+              onChange={setEndDateInput}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:border-amber-500"
+            />
+          </div>
 
-              return {
-                assignment_id: `OP-${op.operation_id}-${member.staff_id}`,
-                order_id: op.order_id,
-                staff_role: roleStr,
-                staff_id: member.staff_id,
-                staff_name: member.name,
-                assignment_date: order.event_date,
-                assignment_status: ['Completed', 'Event Completed', 'Raw Footage Received'].includes(op.event_status || '') ? 'Completed' : 'Assigned',
-              } as StaffAssignment;
-            });
-
-            const mergedAssignments = [...directAssignments, ...opAssignments];
-
-            // Filter out duplicate order_ids just to be completely safe
-            const uniqueAssignments = Array.from(new Map(mergedAssignments.map(a => [a.order_id, a])).values());
-
-            // Active/Scheduled: event date >= Today and status is Assigned
-            const scheduledCount = uniqueAssignments.filter(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const dt = a.assignment_date || order?.event_date || '';
-              return a.assignment_status === 'Assigned' && dt >= TODAY_REF;
-            }).length;
-
-            // Completed events: explicitly marked completed, closed or delivered
-            const completedCount = uniqueAssignments.filter(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const isOrderCompleted = order && ['Completed', 'Delivered', 'Paid', 'Closed', 'Raw Footage Received'].includes(order.current_stage || order.order_status);
-              return a.assignment_status === 'Completed' || isOrderCompleted;
-            }).length;
-
-            // Ongoing events: event date is TODAY
-            const ongoingCount = uniqueAssignments.filter(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const dt = a.assignment_date || order?.event_date || '';
-              return a.assignment_status === 'Assigned' && dt === TODAY_REF;
-            }).length;
-
-            // Upcoming events
-            const upcomingCount = uniqueAssignments.filter(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const dt = a.assignment_date || order?.event_date || '';
-              return dt > TODAY_REF;
-            }).length;
-
-            // Overdue events: event date in past but still status Assigned/not done
-            const overdueCount = uniqueAssignments.filter(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const dt = a.assignment_date || order?.event_date || '';
-              const isDone = a.assignment_status === 'Completed' || 
-                             (order && ['Completed', 'Delivered', 'Paid', 'Closed', 'Raw Footage Received'].includes(order.current_stage || order.order_status));
-              return !isDone && dt && dt < TODAY_REF;
-            }).length;
-
-            const pendingCount = uniqueAssignments.length - completedCount;
-
-            const completionRate = uniqueAssignments.length > 0 
-              ? Math.round((completedCount / uniqueAssignments.length) * 100) 
-              : 100;
-
-            let revenueGenerated = 0;
-            uniqueAssignments.forEach(a => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              if (order && order.quotation_amount) {
-                revenueGenerated += order.quotation_amount;
-              }
-            });
-
-            const lastDate = uniqueAssignments.reduce((acc, a) => {
-              const order = orders.find(o => o.order_id === a.order_id);
-              const dt = a.assignment_date || order?.event_date || '';
-              return dt > acc ? dt : acc;
-            }, '');
-
-            return {
-              member,
-              staff_id: member.staff_id,
-              name: member.name,
-              role: member.role || 'Crew Member',
-              status: member.status || 'Active',
-              email: member.email,
-              mobile: member.mobile,
-              assignedCount: uniqueAssignments.length,
-              scheduledCount,
-              completedCount,
-              pendingCount,
-              ongoingCount,
-              upcomingCount,
-              overdueCount,
-              completionRate,
-              rating: member.rating || 4.5,
-              revenueGenerated,
-              lastAssignedDate: lastDate || 'N/A',
-              assignments: uniqueAssignments
-            };
-          });
-
-          // Unique Roles list for filtering
-          const uniqueRoles = Array.from(new Set(opsStaff.map(s => s.role).filter(Boolean)));
-
-          // Compute KPI totals across all operations staff
-          const totalStaffCount = opsStaff.length;
-          const activeStaffCount = opsStaff.filter(s => s.status === 'Active').length;
-          const totalOngoingTasks = staffPerformanceData.reduce((sum, s) => sum + s.ongoingCount, 0);
-          const totalScheduledEvents = staffPerformanceData.reduce((sum, s) => sum + s.scheduledCount, 0);
-          const totalCompletedEvents = staffPerformanceData.reduce((sum, s) => sum + s.completedCount, 0);
-          const totalUpcomingEvents = staffPerformanceData.reduce((sum, s) => sum + s.upcomingCount, 0);
-          const totalOverdueAssignments = staffPerformanceData.reduce((sum, s) => sum + s.overdueCount, 0);
-
-          // Filtering the table based on search query, role selection and clickable cards
-          const filteredStaffPerformance = staffPerformanceData.filter(s => {
-            const matchesSearch = s.name.toLowerCase().includes(staffNameFilter.toLowerCase());
-            const matchesRole = staffRoleFilter === 'All' || s.role === staffRoleFilter;
-            
-            // Sub-card quick filters
-            if (activeStaffCardFilter === 'ActiveStaff') {
-              return matchesSearch && matchesRole && s.status === 'Active';
-            }
-            if (activeStaffCardFilter === 'OngoingTasks') {
-              return matchesSearch && matchesRole && s.ongoingCount > 0;
-            }
-            if (activeStaffCardFilter === 'ScheduledEvents') {
-              return matchesSearch && matchesRole && s.scheduledCount > 0;
-            }
-            if (activeStaffCardFilter === 'CompletedEvents') {
-              return matchesSearch && matchesRole && s.completedCount > 0;
-            }
-            if (activeStaffCardFilter === 'UpcomingEvents') {
-              return matchesSearch && matchesRole && s.upcomingCount > 0;
-            }
-            if (activeStaffCardFilter === 'OverdueAssignments') {
-              return matchesSearch && matchesRole && s.overdueCount > 0;
-            }
-
-            return matchesSearch && matchesRole;
-          });
-
-          // Report Downloading Utilities
-          const downloadCSV = () => {
-            const csvRows = [
-              ['Staff Name', 'Staff Role', 'Status', 'Total Assigned Events', 'Scheduled Events', 'Completed Events', 'Pending Events', 'Ongoing Events', 'Completion Rate', 'Last Assigned Date'],
-              ...filteredStaffPerformance.map(s => [
-                s.name,
-                s.role,
-                s.status,
-                s.assignedCount,
-                s.scheduledCount,
-                s.completedCount,
-                s.pendingCount,
-                s.ongoingCount,
-                `${s.completionRate}%`,
-                s.lastAssignedDate
-              ])
-            ];
-            const csvString = '\uFEFF' + csvRows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',')).join('\n');
-            const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Operations_Staff_Performance_Report.csv`;
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          };
-
-          const downloadExcel = () => {
-            // XLS formatted CSV representing Microsoft Excel compatibility
-            const xlsHeader = `sep=,\r\n`;
-            const xlsRows = [
-              ['Operations Crew Performance Audit Report'],
-              [`Export Bounds: ${formatDateDDMMYY(activeRange.start)} through ${formatDateDDMMYY(activeRange.end)}`],
-              [`Generated: ${formatDateDDMMYY(new Date())}`],
-              [],
-              ['Staff Name', 'Staff Role', 'Roster Status', 'Assigned Events', 'Scheduled Events', 'Completed Events', 'Pending Events', 'Ongoing Events', 'Completion Rate %', 'Last Booked Date'],
-              ...filteredStaffPerformance.map(s => [
-                s.name,
-                s.role,
-                s.status,
-                s.assignedCount,
-                s.scheduledCount,
-                s.completedCount,
-                s.pendingCount,
-                s.ongoingCount,
-                s.completionRate,
-                s.lastAssignedDate
-              ])
-            ];
-            const xlsString = xlsHeader + xlsRows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-            const blob = new Blob([xlsString], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `Operations_Staff_Roster_Performance_${new Date().toISOString().split('T')[0]}.xls`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          };
-
-          const downloadPDF = () => {
-            const doc = new jsPDF();
-            doc.setFont('Helvetica', 'bold');
-            doc.setFontSize(16);
-            doc.text('PHOTO CREW ERP - OPERATIONS STAFF AUDIT', 14, 20);
-            
-            doc.setFontSize(10);
-            doc.setFont('Helvetica', 'normal');
-            doc.text(`Roster Range: ${activeRange.start} to ${activeRange.end}`, 14, 26);
-            doc.text(`Export Filter: Name="${staffNameFilter || 'Any'}", Role="${staffRoleFilter}"`, 14, 31);
-            doc.text(`Total Staff Records: ${filteredStaffPerformance.length}`, 14, 36);
-
-            doc.setDrawColor(200, 200, 200);
-            doc.line(14, 42, 196, 42);
-
-            let y = 50;
-            doc.setFont('Helvetica', 'bold');
-            doc.setFontSize(8);
-            
-            const cols = ['NAME', 'ROLE', 'ASSIGNED', 'SCHEDULED', 'COMPLETED', 'PENDING', 'ONGOING', 'RATE %'];
-            cols.forEach((col, idx) => {
-              doc.text(col, 14 + idx * 23, y);
-            });
-
-            doc.setFont('Helvetica', 'normal');
-            y += 6;
-
-            filteredStaffPerformance.slice(0, 30).forEach(s => {
-              if (y > 275) {
-                doc.addPage();
-                y = 20;
-              }
-              doc.text(s.name.substring(0, 16), 14, y);
-              doc.text(s.role.substring(0, 16), 14 + 23, y);
-              doc.text(String(s.assignedCount), 14 + 46, y);
-              doc.text(String(s.scheduledCount), 14 + 69, y);
-              doc.text(String(s.completedCount), 14 + 92, y);
-              doc.text(String(s.pendingCount), 14 + 115, y);
-              doc.text(String(s.ongoingCount), 14 + 138, y);
-              doc.text(`${s.completionRate}%`, 14 + 161, y);
-              y += 7;
-            });
-
-            doc.save(`Operations_Staff_Audits_${new Date().toISOString().split('T')[0]}.pdf`);
-          };
-
-          return (
-            <div className="space-y-6">
-              {/* STAFF KPI CARDS GRID */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 lg:grid-cols-7 gap-3">
-                
-                {/* 1. Total Operations Staff */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter(null)}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === null 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-800'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Total Crew</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-white font-sans">{totalStaffCount}</h4>
-                    <span className="text-[9px] text-zinc-500">Staff</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                    Rostered
-                  </div>
-                </div>
-
-                {/* 2. Active Staff */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('ActiveStaff')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'ActiveStaff' 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-emerald-500/30'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Active Roster</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-emerald-450 font-sans">{activeStaffCount}</h4>
-                    <span className="text-[9px] text-zinc-500">Ready</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    Available
-                  </div>
-                </div>
-
-                {/* 3. Ongoing Tasks */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('OngoingTasks')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'OngoingTasks' 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-amber-500/30'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Ongoing Today</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-amber-450 font-sans">{totalOngoingTasks}</h4>
-                    <span className="text-[9px] text-zinc-500">Live</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    In Field
-                  </div>
-                </div>
-
-                {/* 4. Scheduled Events */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('ScheduledEvents')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'ScheduledEvents' 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-blue-500/30'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Scheduled</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-blue-400 font-sans">{totalScheduledEvents}</h4>
-                    <span className="text-[9px] text-zinc-500">Tasks</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                    Allocated
-                  </div>
-                </div>
-
-                {/* 5. Completed Events */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('CompletedEvents')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'CompletedEvents' 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-teal-500/30'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Completed</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-teal-400 font-sans">{totalCompletedEvents}</h4>
-                    <span className="text-[9px] text-zinc-500">Done</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
-                    File Sealed
-                  </div>
-                </div>
-
-                {/* 6. Upcoming Events */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('UpcomingEvents')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'UpcomingEvents' 
-                      ? 'bg-zinc-900/65 border-indigo-500/50 shadow-[0_0_12px_rgba(99,102,241,0.08)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-purple-500/30'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-500 font-bold block">Upcoming</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-purple-400 font-sans">{totalUpcomingEvents}</h4>
-                    <span className="text-[9px] text-zinc-500">Shoots</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-zinc-600 mt-2 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                    Rostered
-                  </div>
-                </div>
-
-                {/* 7. Overdue Assignments */}
-                <div 
-                  onClick={() => setActiveStaffCardFilter('OverdueAssignments')}
-                  className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
-                    activeStaffCardFilter === 'OverdueAssignments' 
-                      ? 'bg-zinc-900/65 border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.1)]' 
-                      : 'bg-zinc-950/40 border-zinc-900 hover:border-red-500/40'
-                  }`}
-                >
-                  <span className="text-[9px] font-mono uppercase text-zinc-550 font-bold block">Overdue Shoot</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <h4 className="text-xl font-bold text-red-400 font-sans">{totalOverdueAssignments}</h4>
-                    <span className="text-[9px] text-zinc-500">Delay</span>
-                  </div>
-                  <div className="text-[8px] font-mono text-rose-500/80 mt-2 flex items-center gap-1 font-bold animate-pulse">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                    Alert Lock
-                  </div>
-                </div>
-
-              </div>
-
-              {/* FILTRATION TOOLBAR */}
-              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-850 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-                  
-                  {/* Name Filter */}
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-                    <input 
-                      type="text"
-                      placeholder="Filter staff by name..."
-                      value={staffNameFilter}
-                      onChange={(e) => setStaffNameFilter(e.target.value)}
-                      className="w-full bg-[#08080a] border border-zinc-800 rounded-lg py-2 pl-9 pr-4 text-xs text-white placeholder-zinc-550 outline-none focus:border-indigo-500 transition-all font-sans"
-                    />
-                  </div>
-
-                  {/* Role Selector */}
-                  <div className="relative min-w-max">
-                    <span className="absolute left-2.5 top-[11px] text-[9px] font-mono uppercase tracking-wider text-zinc-650 font-black">Role:</span>
-                    <select
-                      value={staffRoleFilter}
-                      onChange={(e) => setStaffRoleFilter(e.target.value)}
-                      className="w-full bg-[#08080a] border border-zinc-800 rounded-lg py-2 pl-12 pr-4 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all cursor-pointer font-mono"
-                    >
-                      <option value="All">All Operations Roles</option>
-                      {uniqueRoles.map(r => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Exporters Button Group */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-mono text-zinc-500 mr-1 uppercase">Exports:</span>
-                  <button 
-                    onClick={downloadPDF}
-                    className="p-2 py-1.5 bg-zinc-950/80 border border-zinc-800 hover:border-rose-500/40 text-rose-400 rounded-lg text-[10px] font-mono uppercase transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <FileText className="w-3 h-3" /> PDF
-                  </button>
-                  <button 
-                    onClick={downloadExcel}
-                    className="p-2 py-1.5 bg-zinc-950/80 border border-zinc-800 hover:border-emerald-500/40 text-emerald-400 rounded-lg text-[10px] font-mono uppercase transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Download className="w-3 h-3" /> Excel
-                  </button>
-                  <button 
-                    onClick={downloadCSV}
-                    className="p-2 py-1.5 bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500/40 text-indigo-400 rounded-lg text-[10px] font-mono uppercase transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <Activity className="w-3 h-3" /> CSV
-                  </button>
-                </div>
-              </div>
-
-              {/* STAFF PERFORMANCE DATA TABLE */}
-              <div className="overflow-x-auto border border-zinc-850/70 rounded-xl bg-zinc-950/40">
-                <table className="w-full text-left border-collapse font-sans text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-850 bg-zinc-950/70 text-zinc-400 font-mono text-[9px] uppercase tracking-wider">
-                      <th className="py-3 px-4 font-black">Staff Member</th>
-                      <th className="py-3 px-4 font-black">Roster Role</th>
-                      <th className="py-3 px-4 font-black text-center">Total Ordered Events</th>
-                      <th className="py-3 px-4 text-center text-emerald-400">Events Handled</th>
-                      <th className="py-3 px-4 text-center text-amber-450">Rating</th>
-                      <th className="py-3 px-4 text-right text-indigo-400">Revenue Generated</th>
-                      <th className="py-3 px-4 text-right">Completion Rate %</th>
-                      <th className="py-3 px-4 text-right">Last Booked Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900">
-                    {filteredStaffPerformance.length > 0 ? (
-                      filteredStaffPerformance.map(s => (
-                        <tr 
-                          key={s.staff_id}
-                          className="hover:bg-zinc-900/30 transition-colors group"
-                        >
-                          {/* Staff Name with click action */}
-                          <td className="py-3 px-4">
-                            <button 
-                              onClick={() => setSelectedStaffDetail(s)}
-                              className="text-white font-semibold hover:text-indigo-400 flex items-center gap-1.5 cursor-pointer text-left focus:outline-none"
-                            >
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 group-hover:bg-indigo-400 transition-colors" />
-                              {s.name}
-                              <Info className="w-3 h-3 text-zinc-650 opacity-0 group-hover:opacity-100 transition-all" />
-                            </button>
-                          </td>
-                          
-                          <td className="py-3 px-4 text-zinc-400 font-mono text-[10px]">{s.role}</td>
-                          <td className="py-3 px-4 text-center font-bold text-white table-cell">{s.assignedCount}</td>
-                          <td className="py-3 px-4 text-center font-semibold text-emerald-500">{s.completedCount}</td>
-                          <td className="py-3 px-4 text-center font-semibold text-amber-500">{s.rating} ★</td>
-                          <td className="py-3 px-4 text-right font-semibold text-indigo-400 font-mono">
-                            {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(s.revenueGenerated)}
-                          </td>
-                          
-                          {/* Completion rate with small meter */}
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <span className="font-mono font-bold text-white">{s.completionRate}%</span>
-                              <div className="w-12 bg-zinc-900 rounded-full h-1 overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${
-                                    s.completionRate > 80 ? 'bg-emerald-500' :
-                                    s.completionRate > 50 ? 'bg-indigo-500' : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${s.completionRate}%` }}
-                                />
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="py-3 px-4 text-right text-zinc-450 font-mono text-[10px]">{s.lastAssignedDate}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={9} className="py-8 text-center text-zinc-550 italic">
-                          No operations team members match the active bounds and query filters.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* STAFF DETAILS DRAWER / MODAL POPUP */}
-              {selectedStaffDetail && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fadeIn">
-                  <div className="bg-zinc-950 border border-zinc-850 w-full w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-                    
-                    {/* Modal Header */}
-                    <div className="p-5 border-b border-zinc-900 bg-zinc-900/60 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-indigo-400">
-                          <Users className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest font-black block">Field Crew Dossier</span>
-                          <h3 className="text-base font-black text-white font-sans">{selectedStaffDetail.name}</h3>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => setSelectedStaffDetail(null)}
-                        className="p-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-colors cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {/* Scrollable Content */}
-                    <div className="p-5 overflow-y-auto space-y-6">
-                      
-                      {/* Grid Info Details */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-900/40 border border-zinc-900">
-                        <div>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Crew Roster Designation</span>
-                          <span className="text-xs text-white font-semibold">{selectedStaffDetail.role}</span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Roster Registration Stats</span>
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold ${
-                            selectedStaffDetail.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${selectedStaffDetail.status === 'Active' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
-                            {selectedStaffDetail.status}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Performance Rate %</span>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs font-mono font-black text-indigo-455">{selectedStaffDetail.completionRate}%</span>
-                            <div className="w-16 bg-zinc-950 rounded-full h-1">
-                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${selectedStaffDetail.completionRate}%` }} />
-                            </div>
-                          </div>
-                        </div>
-                        <div className="pt-2 border-t border-zinc-900 sm:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <span className="text-[9px] font-mono text-zinc-500 uppercase block">Roster Email</span>
-                            <span className="text-xs text-zinc-300 font-mono select-all break-all">{selectedStaffDetail.email || 'N/A'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-mono text-zinc-500 uppercase block">Roster Mobile</span>
-                            <span className="text-xs text-zinc-300 font-mono select-all">{selectedStaffDetail.mobile || 'N/A'}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* STATS TRIPLETS */}
-                      <div className="grid grid-cols-3 gap-3 text-center">
-                        <div className="p-3 rounded-xl bg-[#09090b] border border-zinc-900">
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Assigned Shoots</span>
-                          <h5 className="text-xl font-bold text-white mt-1 font-sans">{selectedStaffDetail.assignedCount}</h5>
-                        </div>
-                        <div className="p-3 rounded-xl bg-[#09090b] border border-zinc-900">
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Completed Shoots</span>
-                          <h5 className="text-xl font-bold text-emerald-450 mt-1 font-sans">{selectedStaffDetail.completedCount}</h5>
-                        </div>
-                        <div className="p-3 rounded-xl bg-[#09090b] border border-zinc-900">
-                          <span className="text-[9px] font-mono text-zinc-500 uppercase block">Pending / Upcoming</span>
-                          <h5 className="text-xl font-bold text-indigo-455 mt-1 font-sans">{selectedStaffDetail.pendingCount}</h5>
-                        </div>
-                      </div>
-
-                      {/* UPCOMING EVENTS LIST */}
-                      <div className="space-y-3">
-                        <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-black">
-                          Upcoming / Active Event Calendar Allocation
-                        </h4>
-                        <div className="space-y-2 max-h-[140px] overflow-y-auto pr-1">
-                          {selectedStaffDetail.assignments.filter((a: any) => {
-                            const order = orders.find(o => o.order_id === a.order_id);
-                            return (a.assignment_date && a.assignment_date >= TODAY_REF) || (order && order.event_date >= TODAY_REF);
-                          }).length > 0 ? (
-                            selectedStaffDetail.assignments.filter((a: any) => {
-                              const order = orders.find(o => o.order_id === a.order_id);
-                              return (a.assignment_date && a.assignment_date >= TODAY_REF) || (order && order.event_date >= TODAY_REF);
-                            }).map((a: any) => {
-                              const order = orders.find(o => o.order_id === a.order_id);
-                              return (
-                                <div key={a.assignment_id} className="p-2.5 rounded-lg bg-zinc-900/50 border border-zinc-850 flex items-center justify-between text-[11px] font-sans">
-                                  <div>
-                                    <span className="font-bold text-white block">{order?.customer_name || 'Client Event'}</span>
-                                    <span className="text-zinc-500 text-[10px] font-mono">{a.order_id} • Assigned as {a.staff_role}</span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-zinc-300 font-mono text-[10px] block">{a.assignment_date || order?.event_date || 'Future'}</span>
-                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-indigo-500/10 text-indigo-400 uppercase font-mono">{order?.event_type || 'Shoot'}</span>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-[11px] text-zinc-650 italic text-center py-2">No future events allocated within active roster scope.</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* EVENT COMPLETION TIMELINE */}
-                      <div className="space-y-3">
-                        <h4 className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-black">
-                          Event Allocation & Completion History Timeline
-                        </h4>
-                        <div className="border-l border-zinc-850 ml-3 pl-4 space-y-3.5 max-h-[180px] overflow-y-auto pr-1">
-                          {selectedStaffDetail.assignments.length > 0 ? (
-                            selectedStaffDetail.assignments.map((a: any) => {
-                              const order = orders.find(o => o.order_id === a.order_id);
-                              const isFinished = a.assignment_status === 'Completed' || (order && ['Completed', 'Delivered', 'Paid', 'Closed'].includes(order.current_stage || order.order_status));
-                              return (
-                                <div key={a.assignment_id} className="relative">
-                                  {/* Timeline marker */}
-                                  <span className={`absolute -left-[21px] top-1 w-2.5 h-2.5 rounded-full border-2 border-zinc-950 ${
-                                    isFinished ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-indigo-500'
-                                  }`} />
-                                  <div className="text-[11px]">
-                                    <div className="flex items-center gap-2">
-                                      <span className="font-bold text-white">{order?.customer_name || 'Event Assignment'}</span>
-                                      <span className={`text-[8px] uppercase px-1 rounded font-bold font-mono ${
-                                        isFinished ? 'bg-emerald-500/10 text-emerald-400' : 'bg-indigo-500/10 text-indigo-400'
-                                      }`}>
-                                        {isFinished ? 'Sealed / Done' : 'Assigned (Active)'}
-                                      </span>
-                                    </div>
-                                    <span className="text-[10px] text-zinc-500 block font-mono mt-0.5">
-                                      Date: {a.assignment_date || order?.event_date || 'N/A'} • Role: {a.staff_role} • ID: {a.order_id}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <p className="text-[11px] text-zinc-650 italic text-center py-2">No assignments to chart.</p>
-                          )}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Footer */}
-                    <div className="p-4 border-t border-zinc-900 bg-zinc-950/80 text-right">
-                      <button 
-                        onClick={() => setSelectedStaffDetail(null)}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer transition-colors"
-                      >
-                        Acknowledge
-                      </button>
-                    </div>
-
-                  </div>
-                </div>
-              )}
-
-            </div>
-          );
-        })()}
+          <div className="md:col-span-2 flex gap-2">
+            <button
+              onClick={handleApplyFilters}
+              className="flex-1 flex items-center justify-center bg-amber-500 hover:bg-amber-450 hover:shadow-lg hover:shadow-amber-500/10 py-1.5 text-xs font-mono font-bold text-zinc-950 rounded-xl transition-all cursor-pointer font-bold uppercase select-none"
+            >
+              APPLY
+            </button>
+            <button
+              onClick={handleResetFilters}
+              className="flex-1 flex items-center justify-center bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 py-1.5 text-xs font-mono font-bold text-zinc-300 rounded-xl transition-all cursor-pointer select-none"
+              title="Clear text query and date boundaries"
+            >
+              RESET
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Analytics Drilldown Modal */}
-      {selectedCard && (
-        <AnalyticsReportModal
-          isOpen={!!selectedCard}
-          onClose={() => setSelectedCard(null)}
-          reportTitle={`OPERATIONS LOGICAL REPORT: ${selectedCard.toUpperCase()}`}
-          reportType="operations"
-          cardName={selectedCard}
-          leads={leads}
-          orders={orders}
-          payments={payments}
-          operations={operations}
-          production={production}
-          staff={staff}
-        />
+      {/* OPERATIONS ANALYTICS CARDS GRID (CAMERA LENS & DSLR STYLE) */}
+      <div className="space-y-3">
+        <div className="border-b border-zinc-900 pb-2.5 flex items-center justify-between">
+          <span className="text-xs font-mono font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+            <span>OPERATIONS PIPELINE TELEMETRY (10 METRICS CARD RING)</span>
+          </span>
+          <span className="text-[10px] font-mono text-zinc-500 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-900">
+            Filtered matching records: {filteredOrders.length}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
+          {[
+            { id: 'total_events', label: 'Total Events', val: totalEvents.length, desc: 'Overall registry scope', color: 'text-indigo-400', focal: '50mm' },
+            { id: 'events_scheduled', label: 'Events Scheduled', val: eventsScheduled.length, desc: 'Assignments confirmed', color: 'text-violet-400', focal: '85mm' },
+            { id: 'upcoming_events', label: 'Upcoming Events', val: upcomingEvents.length, desc: 'Scheduled future dates', color: 'text-blue-400', focal: '70-200mm' },
+            { id: 'ongoing_events', label: 'Ongoing Events', val: ongoingEvents.length, desc: 'Active shoots today', color: 'text-rose-400', focal: '24mm' },
+            { id: 'overdue_events', label: 'Overdue Events', val: overdueEvents.length, desc: 'Action required!', color: 'text-amber-500', focal: '16mm' },
+            { id: 'raw_footage', label: 'Raw Footage Received', val: rawFootageEvents.length, desc: 'Footage logs stored', color: 'text-orange-400', focal: '135mm' },
+            { id: 'total_staff', label: 'Total Staff', val: totalStaff.length, desc: 'Consolidated roster', color: 'text-slate-300', focal: 'AF-C' },
+            { id: 'active_staff', label: 'Active Staff', val: activeStaff.length, desc: 'Available for shoot', color: 'text-emerald-400', focal: 'MF' },
+            { id: 'staff_pending', label: 'Staff Pending Events', val: staffPendingEvents.length, desc: 'Work coordination lock', color: 'text-yellow-500', focal: 'ISO 100' },
+            { id: 'staff_completed', label: 'Staff Completed Events', val: staffCompletedEvents.length, desc: 'High rating delivery', color: 'text-cyan-400', focal: 'ISO 400' },
+          ].map((card) => {
+            const isSelected = selectedCard === card.id;
+            return (
+              <button
+                key={card.id}
+                onClick={() => setSelectedCard(card.id)}
+                className={`p-4 rounded-xl relative overflow-hidden backdrop-blur-md shadow-xl border cursor-pointer select-none transition-all duration-300 hover:-translate-y-1 text-left ${
+                  isSelected 
+                    ? 'bg-zinc-950/90 border-amber-500 ring-2 ring-amber-500/20 shadow-amber-500/10' 
+                    : 'bg-zinc-900/60 border-zinc-850 hover:border-zinc-800 hover:bg-zinc-900/80'
+                } before:absolute before:inset-0 before:bg-gradient-to-tr before:from-transparent before:via-white/5 before:to-transparent before:-translate-x-full hover:before:translate-x-full before:transition-transform before:duration-1000 before:ease-out`}
+              >
+                {/* Concentric lens ring vector behind values */}
+                <div className={`absolute -right-5 -bottom-5 w-20 h-20 rounded-full border border-dashed pointer-events-none transition-transform duration-1000 ${
+                  isSelected ? 'border-amber-500/20 animate-[spin_20s_linear_infinite] scale-110' : 'border-zinc-800/40'
+                }`} />
+                <div className="absolute right-3 top-3 w-1 h-3 bg-zinc-800/30 rounded pointer-events-none" />
+
+                {/* DSLR focus corner indicator lines */}
+                {isSelected && (
+                  <>
+                    <div className="absolute top-2 left-2 w-2.5 h-2.5 border-t-2 border-l-2 border-amber-500/90" />
+                    <div className="absolute top-2 right-2 w-2.5 h-2.5 border-t-2 border-r-2 border-amber-500/90" />
+                    <div className="absolute bottom-2 left-2 w-2.5 h-2.5 border-b-2 border-l-2 border-amber-500/90" />
+                    <div className="absolute bottom-2 right-2 w-2.5 h-2.5 border-b-2 border-r-2 border-amber-500/90" />
+                  </>
+                )}
+
+                {/* Header lens metrics */}
+                <div className="flex items-start justify-between gap-1.5">
+                  <span className="text-[9px] uppercase font-mono tracking-widest font-black text-zinc-400 break-words leading-tight flex-1 min-w-0">{card.label}</span>
+                  <span className="text-[8px] font-mono font-bold text-zinc-500 shrink-0">{card.focal}</span>
+                </div>
+
+                {/* KPI value */}
+                <div className="mt-3.5 flex items-baseline justify-between relative z-10">
+                  <span className={`text-2xl font-black font-mono tracking-tight transition-all duration-300 ${isSelected ? 'text-amber-400' : card.color}`}>
+                    {card.val}
+                  </span>
+                  {isSelected && <span className="text-[8px] text-amber-500 font-bold font-mono tracking-wider animate-pulse">[FOCUS ENGAGED]</span>}
+                </div>
+
+                {/* Description */}
+                <p className="text-[9px] text-zinc-500 mt-2.5 font-mono leading-tight break-words">{card.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* DETAILED TABLE VIEW (DYNAMIC TARGET RECORD DRILLDOWN) */}
+      <div className="bg-zinc-950/60 border border-zinc-850 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
+        {/* Decorative corner vectors */}
+        <div className="absolute top-3 left-3 w-1.5 h-1.5 border-t border-l border-amber-500/40" />
+        <div className="absolute top-3 right-3 w-1.5 h-1.5 border-t border-r border-amber-500/40" />
+        <div className="absolute bottom-3 left-3 w-1.5 h-1.5 border-b border-l border-amber-500/40" />
+        <div className="absolute bottom-3 right-3 w-1.5 h-1.5 border-b border-r border-amber-500/40" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-900 pb-3 mb-4 gap-2 relative z-10">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-450 px-2 py-0.5 rounded font-mono font-bold">DRILLDOWN TABLE</span>
+            <h4 className="text-xs font-mono font-black text-zinc-100 uppercase tracking-widest">
+              {activeDetail.title} ({activeDetail.data.length} Matches)
+            </h4>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-550">
+            Active Filter Set: {appliedStartDate || 'Anytime'} to {appliedEndDate || 'Anytime'}
+          </span>
+        </div>
+
+        {activeDetail.data.length === 0 ? (
+          <div className="p-8 text-center text-zinc-500 border border-dashed border-zinc-850 rounded-xl font-mono text-xs italic">
+            Zero matches found. Verify that your filter inputs are accurate or try searching for another term.
+          </div>
+        ) : activeDetail.type === 'events' ? (
+          /* EVENT DRILLDOWN TABLE */
+          <div className="overflow-x-auto relative z-10">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-zinc-900 text-[10px] text-zinc-450 uppercase font-mono bg-zinc-900/30">
+                  <th className="py-2.5 px-3">Order ID</th>
+                  <th className="py-2.5 px-3">Customer Name</th>
+                  <th className="py-2.5 px-3">Event Type</th>
+                  <th className="py-2.5 px-3">Event Date</th>
+                  <th className="py-2.5 px-3">Assigned Staff</th>
+                  <th className="py-2.5 px-3">Current Status</th>
+                  <th className="py-2.5 px-3">Reporting Time</th>
+                  <th className="py-2.5 px-3">Created Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-900 font-mono text-[11px] text-zinc-300">
+                {(activeDetail.data as Order[]).map((o) => (
+                  <tr key={o.order_id} className="hover:bg-zinc-900/30 transition-colors">
+                    <td className="py-2.5 px-3 font-bold text-zinc-200">{o.order_id}</td>
+                    <td className="py-2.5 px-3 text-zinc-100 font-sans font-medium">{o.customer_name}</td>
+                    <td className="py-2.5 px-3 text-zinc-400">{o.event_type}</td>
+                    <td className="py-2.5 px-3 text-zinc-200">{formatDate(o.event_date)}</td>
+                    <td className="py-2.5 px-3 text-zinc-400 break-words max-w-xs font-sans text-[11px]">
+                      {getAssignedCrewString(o.order_id)}
+                    </td>
+                    <td className="py-2.5 px-3">{getStageBadge(o.current_stage)}</td>
+                    <td className="py-2.5 px-3 text-amber-400">{getReportingTimeOfEvent(o.order_id)}</td>
+                    <td className="py-2.5 px-3 text-zinc-500">{o.created_at ? o.created_at.split('T')[0] : 'N/A'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* STAFF DRILLDOWN ROSTER */
+          <div className="overflow-x-auto relative z-10">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-zinc-900 text-[10px] text-zinc-450 uppercase font-mono bg-zinc-900/30">
+                  <th className="py-2.5 px-3">Staff ID</th>
+                  <th className="py-2.5 px-3">Staff Name</th>
+                  <th className="py-2.5 px-3">Designated Role</th>
+                  <th className="py-2.5 px-3">Contact Email</th>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Details Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-900 font-mono text-[11px] text-zinc-300">
+                {(activeDetail.data as Staff[]).map((s) => {
+                  const assigned = getStaffAssignedOrders(s, filteredOrders);
+                  return (
+                    <tr key={s.staff_id} className="hover:bg-zinc-900/30 transition-colors">
+                      <td className="py-2.5 px-3 text-zinc-400">{s.staff_id}</td>
+                      <td className="py-2.5 px-3 text-zinc-100 font-sans font-bold">{s.name}</td>
+                      <td className="py-2.5 px-3 text-indigo-400">{s.role}</td>
+                      <td className="py-2.5 px-3 text-zinc-400 font-sans">{s.email}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                          s.status === 'Active' 
+                            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
+                            : 'bg-zinc-800/10 border border-zinc-850 text-zinc-500'
+                        }`}>
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="py-1 px-3">
+                        <button 
+                          onClick={() => setSelectedStaff(s)}
+                          className="text-amber-500 hover:text-amber-400 font-mono text-[10px] flex items-center gap-1 cursor-pointer hover:underline"
+                        >
+                          Roster File [{assigned.length} Events] ➔
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* STAFF PERFORMANCE ROSTER TABLE */}
+      <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl p-5 shadow-2xl relative">
+        <div className="border-b border-zinc-900 pb-3 mb-4 flex items-center justify-between">
+          <h4 className="text-xs font-mono font-black text-zinc-300 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <span>OPERATIONAL STAFF PERFORMANCE DIRECTORY & ASSIGNMENTS</span>
+          </h4>
+          <span className="text-[9px] text-zinc-400 font-mono bg-zinc-950 px-2 py-0.5 border border-zinc-900 rounded">
+            Click row anywhere to load detailed staff schedule
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-zinc-900 text-[10px] text-zinc-450 uppercase font-mono bg-zinc-950/40">
+                <th className="py-3 px-4">Staff Name</th>
+                <th className="py-3 px-4">Staff Role</th>
+                <th className="py-3 px-4 text-center">Assigned Events</th>
+                <th className="py-3 px-4 text-center">Scheduled Events</th>
+                <th className="py-3 px-4 text-center">Completed Events</th>
+                <th className="py-3 px-4 text-center">Pending Events</th>
+                <th className="py-3 px-4 text-center">Current Active Events</th>
+                <th className="py-3 px-4 text-right">Completion Rate %</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-900 font-mono text-[11px] text-zinc-300">
+              {filteredStaff.map((s) => {
+                const assigned = getStaffAssignedOrders(s, filteredOrders);
+                const scheduled = assigned.filter(o => ['Event Scheduled', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
+                const completed = assigned.filter(o => ['Event Completed', 'Raw Footage Received', 'Approved', 'Delivered'].includes(o.current_stage) || o.order_status === 'Completed');
+                const pending = assigned.filter(o => ['Order Confirmed', 'Staff Assigned', 'Operations Assigned'].includes(o.current_stage));
+                const isOngoingToday = assigned.filter(o => o.event_date === todayStr && !['Event Completed', 'Raw Footage Received'].includes(o.current_stage));
+
+                const completionRate = assigned.length > 0 
+                  ? Math.round((completed.length / assigned.length) * 100) 
+                  : 100;
+
+                const isSelected = selectedStaff?.staff_id === s.staff_id;
+
+                return (
+                  <tr 
+                    key={s.staff_id} 
+                    onClick={() => setSelectedStaff(s)}
+                    className={`hover:bg-zinc-850/50 transition-all cursor-pointer ${isSelected ? 'bg-zinc-800/60 border-l-4 border-amber-500' : ''}`}
+                  >
+                    <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
+                      <span className="text-zinc-500 text-xs text-amber-500">📷</span>
+                      <span className="font-sans text-[12px]">{s.name}</span>
+                    </td>
+                    <td className="py-3 px-4 text-indigo-300 text-xs font-sans">{s.role}</td>
+                    <td className="py-3 px-4 text-center font-bold text-zinc-150">{assigned.length}</td>
+                    <td className="py-3 px-4 text-center text-violet-400 font-bold">{scheduled.length}</td>
+                    <td className="py-3 px-4 text-center text-emerald-450 font-bold">{completed.length}</td>
+                    <td className="py-3 px-4 text-center text-yellow-500 font-bold">{pending.length}</td>
+                    <td className="py-3 px-4 text-center text-rose-450 font-bold">{isOngoingToday.length}</td>
+                    <td className="py-3 px-4 text-right font-mono">
+                      <span className={`px-2 py-0.5 rounded font-black ${getCompletionRateColor(completionRate)}`}>
+                        {completionRate}%
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* STAFF DETAILED MODAL / SLIDE DRAW PANEL */}
+      {selectedStaff && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl relative text-left">
+            
+            {/* Header border decor focus ring corner */}
+            <div className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-amber-500/80" />
+            <div className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-amber-500/80" />
+            <div className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-amber-500/80" />
+            <div className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-amber-500/80" />
+
+            {/* Title Bar */}
+            <div className="bg-zinc-900 p-4 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Camera className="w-5 h-5 text-amber-550" />
+                <div>
+                  <h3 className="text-xs font-black uppercase font-mono tracking-widest text-amber-400">STATION ASSIGNMENTS SHEET</h3>
+                  <p className="text-[11px] text-zinc-400 font-sans">Active operational history files for <b>{selectedStaff.name}</b> // {selectedStaff.role}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedStaff(null)} 
+                className="px-2.5 py-1 rounded bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs border border-zinc-800 font-mono"
+              >
+                ✕ Exit
+              </button>
+            </div>
+
+            {/* Dialog Body Content */}
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-zinc-900 p-4 border border-zinc-800 rounded-xl font-mono text-[11px] text-zinc-400">
+                <div>
+                  <span className="text-zinc-550 block text-[9px] uppercase">Roster Status</span>
+                  <span className="text-emerald-400 uppercase font-black">{selectedStaff.status}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-550 block text-[9px] uppercase">Mobile Number</span>
+                  <span className="text-zinc-200 font-sans">{selectedStaff.mobile || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-zinc-550 block text-[9px] uppercase">Roster Department</span>
+                  <span className="text-zinc-200 font-sans">{selectedStaff.department || 'Operations Team'}</span>
+                </div>
+              </div>
+
+              <div className="border-b border-zinc-850 pb-1.5 flex justify-between items-center">
+                <span className="text-[10px] font-mono uppercase text-zinc-350 font-black tracking-widest">
+                  Active Shoots Allocated ({getStaffAssignedOrders(selectedStaff, filteredOrders).length} Records)
+                </span>
+              </div>
+
+              {getStaffAssignedOrders(selectedStaff, filteredOrders).length === 0 ? (
+                <div className="p-8 text-center text-zinc-550 border border-dashed border-zinc-800 rounded-xl italic font-mono text-xs">
+                  Nothing allocated matching current filter boundaries.
+                </div>
+              ) : (
+                <div className="space-y-3 font-sans text-xs">
+                  {getStaffAssignedOrders(selectedStaff, filteredOrders).map((ord) => {
+                    return (
+                      <div 
+                        key={ord.order_id} 
+                        className="bg-zinc-900 border border-zinc-850 hover:border-zinc-800 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all relative"
+                      >
+                        <div className="absolute top-0 bottom-0 left-0 w-1 bg-amber-500 rounded-l" />
+
+                        <div className="space-y-1 pl-2">
+                          <div className="flex items-center gap-2">
+                            <span className="bg-zinc-950 border border-zinc-805 px-1.5 py-0.5 text-[9px] font-mono rounded text-zinc-400 font-bold">
+                              {ord.order_id}
+                            </span>
+                            <span className="font-bold text-zinc-100">{ord.customer_name}</span>
+                          </div>
+                          
+                          <div className="text-[11px] text-zinc-400 font-mono space-y-0.5">
+                            <div>🗓️ Date: <span className="text-zinc-200 font-bold">{formatDate(ord.event_date)}</span></div>
+                            <div>🚀 Location: <span className="text-zinc-250 break-words">{ord.event_location}</span></div>
+                            <div>⏰ Reporting Time: <span className="text-amber-400 font-bold">{getReportingTimeOfEvent(ord.order_id)}</span></div>
+                          </div>
+                        </div>
+
+                        <div className="flex sm:flex-col justify-between items-end gap-1.5 font-mono">
+                          {getStageBadge(ord.current_stage)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer Workspace Action */}
+            <div className="bg-zinc-900 p-4 border-t border-zinc-800 text-right">
+              <button 
+                onClick={() => setSelectedStaff(null)} 
+                className="px-5 py-2 rounded-lg bg-indigo-650 hover:bg-indigo-600 text-xs font-black text-white hover:shadow-lg transition-all cursor-pointer font-sans"
+              >
+                Close File View
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>
   );
 };
+
+// Helper: Color indicators for Rate
+function getCompletionRateColor(rate: number): string {
+  if (rate >= 90) return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+  if (rate >= 70) return 'bg-sky-500/10 text-sky-450 border border-sky-500/20';
+  if (rate >= 50) return 'bg-amber-500/10 text-amber-550 border border-amber-500/20';
+  return 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
+}
