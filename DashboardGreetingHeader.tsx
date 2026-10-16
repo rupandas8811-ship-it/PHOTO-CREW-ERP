@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { useRole } from './RoleContext';
 import { AnimatedSalesGreeting } from './sales/AnimatedSalesGreeting';
@@ -31,32 +31,58 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
 }) => {
   const { currentUser, currentUserName, users = [], staff = [], productionStaff = [] } = useRole();
 
-  // Minimization and manual expand/collapse state
+  // Minimization state: initially expanded by default on every dashboard
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [manuallyExpanded, setManuallyExpanded] = useState<boolean>(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // When dashboardTitle changes (e.g. navigation between dashboard views), reset to expanded
+  useEffect(() => {
+    setIsMinimized(false);
+    setManuallyExpanded(false);
+  }, [dashboardTitle]);
+
+  // 8-second automatic minimization lifecycle
+  useEffect(() => {
+    // If user explicitly expanded the section, keep it expanded
+    if (manuallyExpanded) return;
+
+    // Start 8-second timer to minimize automatically
+    const timerId = window.setTimeout(() => {
+      setIsMinimized(true);
+    }, 8000);
+
+    // Safely clean up timer when component unmounts or navigates
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [dashboardTitle, manuallyExpanded]);
+
+  // Manual Minimize
+  const handleManualMinimize = () => {
+    setManuallyExpanded(false);
+    setIsMinimized(true);
+  };
+
+  // Manual Expand
+  const handleManualExpand = () => {
+    setManuallyExpanded(true);
+    setIsMinimized(false);
+  };
 
   // 1. Resolve user's actual display name
   const finalUserName = useMemo(() => {
-    // If explicitly provided and not a placeholder, use it
     if (userName && !ROLE_PLACEHOLDERS.includes(userName.trim())) {
       return userName.trim();
     }
-
-    // Try currentUser name
     if (currentUser?.name && !ROLE_PLACEHOLDERS.includes(currentUser.name.trim())) {
       return currentUser.name.trim();
     }
     if ((currentUser as any)?.full_name && !ROLE_PLACEHOLDERS.includes((currentUser as any).full_name.trim())) {
       return (currentUser as any).full_name.trim();
     }
-
-    // Try currentUserName from context
     if (currentUserName && !ROLE_PLACEHOLDERS.includes(currentUserName.trim())) {
       return currentUserName.trim();
     }
-
-    // Look up in users list
     if (currentUser?.id || currentUser?.email || currentUser?.mobile) {
       const matchedUser = (users || []).find((u: any) =>
         (currentUser?.id && (u.id === currentUser.id || (u as any).auth_user_id === currentUser.id)) ||
@@ -70,8 +96,6 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
         return matchedUser.full_name.trim();
       }
     }
-
-    // Look up in staff lists
     const allStaff = [...(staff || []), ...(productionStaff || [])];
     if (currentUser?.id || currentUser?.email || currentUser?.mobile) {
       const matchedStaff = allStaff.find((s: any) =>
@@ -83,11 +107,25 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
         return matchedStaff.name.trim();
       }
     }
-
-    return '';
+    if (typeof window !== 'undefined') {
+      try {
+        const storedName = localStorage.getItem('erp_user_name');
+        if (storedName && !ROLE_PLACEHOLDERS.includes(storedName.trim())) {
+          return storedName.trim();
+        }
+        const storedUser = localStorage.getItem('erp_current_user');
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed?.name && !ROLE_PLACEHOLDERS.includes(parsed.name.trim())) return parsed.name.trim();
+          if (parsed?.full_name && !ROLE_PLACEHOLDERS.includes(parsed.full_name.trim())) return parsed.full_name.trim();
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return userName || currentUserName || currentUser?.name || '';
   }, [userName, currentUser, currentUserName, users, staff, productionStaff]);
 
-  // Fallback display name for the compact minimized header
   const displayName = useMemo(() => {
     if (finalUserName && finalUserName.trim()) return finalUserName.trim();
     if (userName && userName.trim()) return userName.trim();
@@ -98,18 +136,9 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
 
   // 2. Resolve user's actual mobile number
   const finalMobile = useMemo(() => {
-    if (userMobile && userMobile.trim()) {
-      return userMobile.trim();
-    }
-
-    if (currentUser?.mobile && currentUser.mobile.trim()) {
-      return currentUser.mobile.trim();
-    }
-    if ((currentUser as any)?.phone && (currentUser as any).phone.trim()) {
-      return (currentUser as any).phone.trim();
-    }
-
-    // Look up in users
+    if (userMobile && userMobile.trim()) return userMobile.trim();
+    if (currentUser?.mobile && currentUser.mobile.trim()) return currentUser.mobile.trim();
+    if ((currentUser as any)?.phone && (currentUser as any).phone.trim()) return (currentUser as any).phone.trim();
     const matchedUser = (users || []).find((u: any) =>
       (currentUser?.id && (u.id === currentUser.id || (u as any).auth_user_id === currentUser.id)) ||
       (currentUser?.email && u.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
@@ -118,8 +147,6 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
     );
     if (matchedUser?.mobile && matchedUser.mobile.trim()) return matchedUser.mobile.trim();
     if ((matchedUser as any)?.phone && (matchedUser as any).phone.trim()) return (matchedUser as any).phone.trim();
-
-    // Look up in staff
     const allStaff = [...(staff || []), ...(productionStaff || [])];
     const matchedStaff = allStaff.find((s: any) =>
       (currentUser?.id && s.staff_id === currentUser.id) ||
@@ -129,57 +156,11 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
     );
     if (matchedStaff?.mobile && matchedStaff.mobile.trim()) return matchedStaff.mobile.trim();
     if ((matchedStaff as any)?.phone && (matchedStaff as any).phone.trim()) return (matchedStaff as any).phone.trim();
-
     return '';
   }, [userMobile, currentUser, finalUserName, users, staff, productionStaff]);
 
-  // 8-second automatic minimization lifecycle
-  useEffect(() => {
-    // Reset view to expanded when entering or switching dashboards
-    setIsMinimized(false);
-    setManuallyExpanded(false);
-
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    // Automatically minimize after 8 seconds
-    timerRef.current = setTimeout(() => {
-      setIsMinimized(true);
-      timerRef.current = null;
-    }, 8000);
-
-    // Clean up timer on unmount or when dashboard changes
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [dashboardTitle]);
-
-  const handleManualMinimize = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    setManuallyExpanded(false);
-    setIsMinimized(true);
-  };
-
-  const handleManualExpand = () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    // If the user manually expands the section, keep it expanded until they minimize again or navigate
-    setManuallyExpanded(true);
-    setIsMinimized(false);
-  };
-
-  // Minimized View: compact header with dashboard name, logged-in user name, and expand button
-  if (isMinimized) {
+  // Minimized View: compact header with dashboard name, logged-in user's name, and plus (+) button
+  if (isMinimized && !manuallyExpanded) {
     return (
       <div 
         id={`welcome_minimized_${dashboardTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}`}
@@ -198,6 +179,7 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
           </div>
           <button
             type="button"
+            id={`btn_expand_${dashboardTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}`}
             onClick={handleManualExpand}
             className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-400 hover:text-amber-400 hover:bg-zinc-800/80 active:scale-95 transition-all cursor-pointer border border-transparent hover:border-zinc-700/60 shrink-0"
             title="Expand welcome section"
@@ -223,6 +205,7 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
         </h1>
         <button
           type="button"
+          id={`btn_minimize_${dashboardTitle.toLowerCase().replace(/[^a-z0-9]/g, '_')}`}
           onClick={handleManualMinimize}
           className="inline-flex items-center justify-center w-6 h-6 rounded-md text-zinc-400 hover:text-amber-400 hover:bg-zinc-800/80 active:scale-95 transition-all cursor-pointer border border-transparent hover:border-zinc-700/60 shrink-0"
           title="Minimize welcome section"
@@ -247,4 +230,3 @@ export const DashboardGreetingHeader: React.FC<DashboardGreetingHeaderProps> = (
     </div>
   );
 };
-
